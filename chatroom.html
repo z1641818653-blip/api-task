@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>AI 聊天室</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+:root {
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-input: #f7f8fa;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+  --accent-blue: #6366f1;
+  --accent-blue-hover: #4f46e5;
+  --accent-blue-light: rgba(99,102,241,0.08);
+  --accent-green: #10b981;
+  --accent-red: #ef4444;
+  --accent-yellow: #fbbf24;
+  --accent-orange: #f59e0b;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --msg-font-size: 14px;
+  --ui-font-size: 13px;
+}
+[data-theme="dark"] {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-input: #1c2333;
+  --text-primary: #f0f0f0;
+  --text-secondary: #b0b8c4;
+  --border-color: #30363d;
+  --accent-blue: #7c8dff;
+  --accent-blue-hover: #6b7dff;
+  --accent-blue-light: rgba(124,141,255,0.12);
+  --accent-green: #3dd68c;
+  --accent-red: #f87171;
+  --accent-yellow: #f0c040;
+  --accent-orange: #fb923c;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.45);
+}
+[data-theme="dark"] .msg-bubble.ai { background: #1c2333; border-color: #30363d; }
+[data-theme="dark"] .setup-card { background: #161b22; }
+[data-theme="dark"] .ai-participant { background: #1c2333; border-color: #30363d; }
+[data-theme="dark"] .ai-participant select,
+[data-theme="dark"] .ai-participant input,
+[data-theme="dark"] .ai-participant textarea { background: #161b22; color: #f0f0f0; border-color: #30363d; }
+[data-theme="dark"] .room-header { border-bottom-color: #30363d; }
+[data-theme="dark"] .thinking-indicator { background: #1c2333; border-color: #30363d; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'PingFang SC', sans-serif; background: var(--bg-primary); color: var(--text-primary); height: 100vh; overflow: hidden; font-size: var(--ui-font-size); }
+.page { display: none; height: 100vh; flex-direction: column; }
+.page.active { display: flex; }
+
+/* Setup Screen */
+.setup-screen { overflow-y: auto; padding: 24px; align-items: center; }
+.setup-inner { max-width: 680px; width: 100%; margin: 0 auto; padding-bottom: 40px; }
+.setup-title { font-size: 24px; font-weight: 800; text-align: center; margin: 20px 0 24px; background: linear-gradient(135deg, #6366f1, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.setup-card { background: var(--bg-secondary); border-radius: var(--radius-xl); padding: 24px; box-shadow: var(--shadow-md); border: 1px solid var(--border-color); margin-bottom: 16px; }
+.setup-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+.setup-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.setup-row label { font-weight: 600; font-size: 13px; min-width: 100px; color: var(--text-primary); }
+.setup-row input[type="text"], .setup-row select { flex: 1; min-width: 140px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; outline: none; background: var(--bg-input); color: var(--text-primary); transition: border-color 0.2s; }
+.setup-row input[type="text"]:focus, .setup-row select:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px var(--accent-blue-light); }
+.setup-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-blue); }
+.ai-participant { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 10px; transition: border-color 0.2s; }
+.ai-participant:hover { border-color: var(--accent-blue); }
+.ai-participant-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ai-participant-header .ai-index { font-weight: 700; font-size: 13px; color: var(--accent-blue); }
+.ai-participant-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.ai-participant-row label { font-size: 11px; font-weight: 600; color: var(--text-secondary); min-width: 60px; display: flex; align-items: center; }
+.ai-participant-row input, .ai-participant-row select { flex: 1; min-width: 120px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 12px; outline: none; background: var(--bg-secondary); color: var(--text-primary); transition: border-color 0.2s; }
+.ai-participant-row input:focus, .ai-participant-row select:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px var(--accent-blue-light); }
+.ai-participant-row textarea { flex: 1; min-width: 200px; min-height: 50px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 12px; outline: none; background: var(--bg-secondary); color: var(--text-primary); resize: vertical; font-family: inherit; transition: border-color 0.2s; }
+.ai-participant-row textarea:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px var(--accent-blue-light); }
+.remove-ai-btn { padding: 4px 12px; border-radius: 12px; border: 1px solid var(--accent-red); background: transparent; color: var(--accent-red); font-size: 11px; cursor: pointer; transition: all 0.15s; font-weight: 600; }
+.remove-ai-btn:hover { background: rgba(239,68,68,0.1); }
+.add-ai-btn { padding: 6px 16px; border-radius: 16px; border: 1px dashed var(--border-color); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.15s; font-weight: 600; }
+.add-ai-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-light); }
+.start-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; color: white; font-weight: 700; font-size: 15px; border-radius: var(--radius-md); cursor: pointer; box-shadow: 0 4px 14px rgba(99,102,241,0.3); transition: all 0.2s; }
+.start-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.4); }
+.start-btn:active { transform: translateY(0); }
+
+/* Chat Room */
+.chat-room { display: flex; flex-direction: column; height: 100vh; }
+.room-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); box-shadow: var(--shadow-sm); z-index: 10; flex-shrink: 0; }
+.room-header-left { display: flex; align-items: center; gap: 12px; }
+.room-header-left h2 { font-size: 16px; font-weight: 700; }
+.room-header-left .room-badge { font-size: 11px; color: var(--text-secondary); background: var(--bg-input); padding: 2px 10px; border-radius: 12px; }
+.room-header-actions { display: flex; gap: 8px; align-items: center; }
+.settings-btn { padding: 6px 14px; border-radius: 14px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.settings-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-light); }
+.theme-btn { padding: 6px 10px; border-radius: 14px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.theme-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-light); }
+.messages-area { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.msg { display: flex; flex-direction: column; gap: 3px; max-width: 100%; animation: msgFadeIn 0.3s ease; }
+@keyframes msgFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.msg.user { align-items: flex-end; }
+.msg.ai { align-items: flex-start; }
+.msg-bubble { padding: 10px 16px; border-radius: var(--radius-md); max-width: 85%; word-wrap: break-word; line-height: 1.65; font-size: var(--msg-font-size); position: relative; }
+.msg.user .msg-bubble { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border-bottom-right-radius: 4px; box-shadow: 0 2px 8px rgba(99,102,241,0.2); }
+.msg.ai .msg-bubble { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-bottom-left-radius: 4px; box-shadow: var(--shadow-sm); }
+.msg.ai .msg-bubble h1, .msg.ai .msg-bubble h2, .msg.ai .msg-bubble h3 { margin-top: 14px; margin-bottom: 8px; font-weight: 700; }
+.msg.ai .msg-bubble h1 { font-size: 1.35em; }
+.msg.ai .msg-bubble h2 { font-size: 1.2em; }
+.msg.ai .msg-bubble h3 { font-size: 1.1em; }
+.msg.ai .msg-bubble p { margin-bottom: 10px; }
+.msg.ai .msg-bubble p:last-child { margin-bottom: 0; }
+.msg.ai .msg-bubble code { background: var(--bg-input); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'JetBrains Mono', monospace; font-size: 0.9em; color: var(--accent-red); }
+.msg.ai .msg-bubble pre { background: #1e1e2e; color: #e0e0e0; padding: 14px; border-radius: var(--radius-sm); overflow-x: auto; margin: 12px 0; border: 1px solid #2e2e3e; }
+.msg.ai .msg-bubble pre code { background: none; padding: 0; color: inherit; font-size: 0.85em; }
+.msg.ai .msg-bubble ul, .msg.ai .msg-bubble ol { margin-left: 22px; margin-bottom: 10px; }
+.msg.ai .msg-bubble li { margin-bottom: 4px; }
+.msg.ai .msg-bubble blockquote { border-left: 3px solid var(--accent-blue); padding: 6px 14px; margin: 10px 0; color: var(--text-secondary); background: var(--bg-input); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.msg.ai .msg-bubble table { border-collapse: collapse; margin: 10px 0; width: 100%; font-size: 12px; }
+.msg.ai .msg-bubble th, .msg.ai .msg-bubble td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; }
+.msg.ai .msg-bubble th { background: var(--bg-input); font-weight: 600; }
+.msg.ai .msg-bubble tr:nth-child(even) { background: var(--bg-input); }
+.msg-label { font-size: 10px; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.02em; display: flex; align-items: center; gap: 6px; }
+.msg .msg-time { font-size: 9px; color: var(--text-secondary); opacity: 0.6; margin-top: 2px; }
+.msg.user .msg-time { color: rgba(255,255,255,0.5); }
+.msg-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0; }
+.input-area-wrap { flex-shrink: 0; background: var(--bg-secondary); border-top: 1px solid var(--border-color); padding: 12px 20px; box-shadow: var(--shadow-md); }
+.input-row { display: flex; gap: 10px; align-items: flex-end; }
+.input-row textarea { flex: 1; min-height: 44px; max-height: 120px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px 14px; font-family: inherit; font-size: var(--ui-font-size); resize: none; outline: none; overflow-y: auto; transition: border-color 0.2s; line-height: 1.5; color: var(--text-primary); }
+.input-row textarea:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px var(--accent-blue-light); }
+.input-row textarea::placeholder { color: #9ca3af; }
+.input-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.send-btn { padding: 8px 20px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; color: white; font-weight: 600; border-radius: 18px; font-size: 13px; cursor: pointer; box-shadow: 0 2px 8px rgba(99,102,241,0.25); transition: all 0.2s; white-space: nowrap; }
+.send-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,0.35); }
+.send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.discuss-btn { padding: 8px 16px; background: transparent; border: 1px solid var(--accent-green); color: var(--accent-green); font-weight: 600; border-radius: 18px; font-size: 12px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.discuss-btn:hover { background: rgba(16,185,129,0.08); }
+.discuss-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.stop-discuss-btn { padding: 8px 16px; background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: 600; border-radius: 18px; font-size: 12px; cursor: pointer; transition: all 0.15s; white-space: nowrap; display: none; }
+.stop-discuss-btn:hover { background: rgba(239,68,68,0.08); }
+.round-counter { font-size: 12px; color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+.thinking-indicator { display: none; align-items: center; gap: 8px; padding: 8px 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.thinking-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(99,102,241,0.2); border-radius: 50%; border-top-color: var(--accent-blue); animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.typing-cursor { display: inline-block; animation: blinkCursor 0.8s step-end infinite; }
+@keyframes blinkCursor { 50% { opacity: 0; } }
+#toastContainer { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { padding: 10px 22px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); animation: toastIn 0.3s ease, toastOut 0.3s ease 2.2s forwards; pointer-events: auto; max-width: 420px; text-align: center; line-height: 1.5; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
+.toast.success { background: #10b981; color: white; }
+.toast.error { background: #ef4444; color: white; }
+.toast.warning { background: #f59e0b; color: white; }
+.toast.info { background: #6366f1; color: white; }
+[data-theme="dark"] .toast.success { background: #059669; }
+[data-theme="dark"] .toast.error { background: #dc2626; }
+[data-theme="dark"] .toast.warning { background: #d97706; }
+[data-theme="dark"] .toast.info { background: #4f46e5; }
+.empty-chat { text-align: center; color: var(--text-secondary); padding: 60px 20px; font-size: 14px; line-height: 1.8; }
+.empty-chat .empty-icon { font-size: 48px; margin-bottom: 16px; }
+.setup-footer { text-align: center; margin-top: 12px; }
+.theme-toggle-setup { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+.theme-toggle-setup button { padding: 6px 18px; border-radius: 14px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.theme-toggle-setup button:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-light); }
+
+@media (max-width: 600px) {
+  .setup-screen { padding: 16px; }
+  .setup-row { flex-direction: column; align-items: stretch; }
+  .setup-row label { min-width: auto; }
+  .setup-row input[type="text"], .setup-row select { min-width: auto; }
+  .ai-participant-row { flex-direction: column; }
+  .ai-participant-row label { min-width: auto; }
+  .ai-participant-row input, .ai-participant-row select { min-width: auto; }
+  .ai-participant-row textarea { min-width: auto; }
+  .messages-area { padding: 12px; }
+  .input-area-wrap { padding: 10px 12px; }
+  .input-row { flex-wrap: wrap; }
+  .input-row textarea { min-width: 100%; }
+  .input-actions { width: 100%; justify-content: flex-end; margin-top: 6px; }
+  .msg-bubble { max-width: 95%; }
+  .room-header { padding: 10px 12px; }
+  .room-header-left h2 { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+
+<div id="setupPage" class="page setup-screen active">
+  <div class="setup-inner">
+    <div class="setup-title">🤖 AI 聊天室</div>
+    <div class="setup-card">
+      <h3>⚙️ 房间设置</h3>
+      <div class="setup-row">
+        <label>房间名称</label>
+        <input type="text" id="roomNameInput" value="AI 聊天室">
+      </div>
+      <div class="setup-row">
+        <label>讨论轮数</label>
+        <select id="roundsSelect">
+          <option value="1">1 轮</option>
+          <option value="2">2 轮</option>
+          <option value="3" selected>3 轮</option>
+          <option value="5">5 轮</option>
+          <option value="10">10 轮</option>
+        </select>
+      </div>
+      <div class="setup-row">
+        <label>自动开始</label>
+        <input type="checkbox" id="autoStartCheck" checked>
+        <span style="font-size:12px;color:var(--text-secondary)">发送初始消息后 AI 自动讨论</span>
+      </div>
+    </div>
+    <div class="setup-card">
+      <h3>🧑‍🤝‍🧑 AI 参与者</h3>
+      <div id="aiParticipantsList"></div>
+      <div style="margin-top:10px;text-align:center">
+        <button id="addAiBtn" class="add-ai-btn">➕ 添加 AI</button>
+      </div>
+    </div>
+    <button id="startChatBtn" class="start-btn">🚀 开始聊天</button>
+    <div class="theme-toggle-setup">
+      <button id="setupThemeBtn">🌙 暗色模式</button>
+    </div>
+  </div>
+</div>
+
+<div id="chatPage" class="page chat-room">
+  <div class="room-header">
+    <div class="room-header-left">
+      <h2 id="roomTitle">AI 聊天室</h2>
+      <span class="room-badge" id="roomBadge">3 轮</span>
+    </div>
+    <div class="room-header-actions">
+      <span class="round-counter" id="roundCounter"></span>
+      <button id="settingsBackBtn" class="settings-btn">⚙️ 设置</button>
+      <button id="chatThemeBtn" class="theme-btn">🌙</button>
+    </div>
+  </div>
+  <div class="messages-area" id="messagesArea">
+    <div class="empty-chat" id="emptyChat">
+      <div class="empty-icon">💬</div>
+      <div>在下方输入消息开始聊天</div>
+      <div style="font-size:12px;margin-top:8px">或点击 "🤖 自动讨论" 让 AI 们自主对话</div>
+    </div>
+  </div>
+  <div id="thinkingIndicator" class="thinking-indicator">
+    <div class="spinner"></div>
+    <span id="thinkingText">AI 思考中...</span>
+  </div>
+  <div class="input-area-wrap">
+    <div class="input-row">
+      <textarea id="chatInput" placeholder="输入消息..." rows="1"></textarea>
+      <div class="input-actions">
+        <button id="sendMsgBtn" class="send-btn">发送</button>
+        <button id="startDiscussBtn" class="discuss-btn">🤖 自动讨论</button>
+        <button id="stopDiscussBtn" class="stop-discuss-btn">⏹️ 停止</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
+
+  const PROVIDERS = {
+    deepseek: { name: 'DeepSeek', icon: '🟢', models: ['deepseek-chat', 'deepseek-reasoner'], endpoint: 'https://api.deepseek.com/v1/chat/completions', authHeader: (key) => ({ 'Authorization': 'Bearer ' + key }), buildBody: (model, messages, mt, temp) => ({ model, messages, temperature: temp ?? 0.7, max_tokens: mt }), parseResponse: (data) => data.choices?.[0]?.message?.content },
+    openai: { name: 'OpenAI', icon: '🟣', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'o3-mini'], endpoint: 'https://api.openai.com/v1/chat/completions', authHeader: (key) => ({ 'Authorization': 'Bearer ' + key }), buildBody: (model, messages, mt, temp) => ({ model, messages, temperature: temp ?? 0.7, max_tokens: mt }), parseResponse: (data) => data.choices?.[0]?.message?.content },
+    claude: { name: 'Claude', icon: '🟠', models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'], endpoint: 'https://api.anthropic.com/v1/messages', authHeader: (key) => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01' }), buildBody: (model, messages, mt, temp) => { const sm = messages.find(m => m.role === 'system'); const cm = messages.filter(m => m.role !== 'system'); const b = { model, max_tokens: mt, temperature: temp ?? 0.7, messages: cm.map(m => ({ role: m.role, content: m.content })) }; if (sm) b.system = sm.content; return b; }, parseResponse: (data) => data.content?.[0]?.text },
+    gemini: { name: 'Gemini', icon: '🔵', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'], endpoint: (model) => 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', authHeader: () => ({}), buildBody: (model, messages, mt, temp) => { const contents = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })); const sm = messages.find(m => m.role === 'system'); const b = { contents, generationConfig: { maxOutputTokens: mt, temperature: temp ?? 0.7 } }; if (sm) b.systemInstruction = { parts: [{ text: sm.content }] }; return b; }, parseResponse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text },
+    qwen: { name: '千问', icon: '🔴', models: ['qwen3-235b', 'qwen3-30b', 'qwen3-turbo'], endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', authHeader: (key) => ({ 'Authorization': 'Bearer ' + key }), buildBody: (model, messages, mt, temp) => ({ model, messages, temperature: temp ?? 0.7, max_tokens: mt }), parseResponse: (data) => data.choices?.[0]?.message?.content }
+  };
+
+  function getApiKey(provider) {
+    try {
+      const raw = localStorage.getItem('dp49');
+      if (raw) {
+        const providers = JSON.parse(raw);
+        if (providers[provider] && providers[provider].apiKey) {
+          try { return decodeURIComponent(atob(providers[provider].apiKey)); } catch {}
+          return providers[provider].apiKey;
+        }
+      }
+    } catch {}
+    if (provider === 'deepseek') return localStorage.getItem('dk30') || '';
+    return '';
+  }
+
+  let state = {
+    participants: [
+      { name: '理性派', prompt: '你是一个理性冷静的分析师，逻辑严密，喜欢用数据和事实说话。', provider: 'deepseek', model: 'deepseek-chat', temp: 0.5 },
+      { name: '毒舌君', prompt: '你是一个毒舌吐槽专家，说话一针见血，幽默讽刺，但观点有道理。', provider: 'openai', model: 'gpt-4o-mini', temp: 0.9 },
+      { name: '温柔姐', prompt: '你是一个温柔体贴的心理咨询师，说话温暖包容，善于鼓励他人。', provider: 'deepseek', model: 'deepseek-chat', temp: 0.7 }
+    ],
+    roomName: 'AI 聊天室',
+    rounds: 3,
+    autoStart: true,
+    messages: [],
+    isDiscussing: false,
+    discussStopped: false,
+    darkMode: localStorage.getItem('chatroom_dark') === 'true',
+    currentRound: 0,
+    currentAiIndex: 0,
+    participantColors: ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+  };
+
+  function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+  function renderMD(content) {
+    if (!content) return '';
+    if (typeof marked !== 'undefined') {
+      try { return marked.parse(content); } catch(e) {}
+    }
+    return esc(content).replace(/\n/g, '<br>');
+  }
+
+  function showToast(message, type) {
+    type = type || 'info';
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    toast.textContent = message;
+    document.getElementById('toastContainer').appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 2500);
+  }
+
+  function applyTheme() {
+    const dark = state.darkMode;
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.getElementById('setupThemeBtn').textContent = dark ? '☀️ 亮色模式' : '🌙 暗色模式';
+    document.getElementById('chatThemeBtn').textContent = dark ? '☀️' : '🌙';
+    localStorage.setItem('chatroom_dark', dark);
+  }
+
+  // ============ Setup Screen ============
+  function renderParticipants() {
+    const list = document.getElementById('aiParticipantsList');
+    list.innerHTML = '';
+    state.participants.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'ai-participant';
+      div.innerHTML = `
+        <div class="ai-participant-header">
+          <span class="ai-index">#${i + 1} ${esc(p.name) || '未命名'}</span>
+          <button class="remove-ai-btn" data-idx="${i}">✕ 移除</button>
+        </div>
+        <div class="ai-participant-row">
+          <label>名称</label>
+          <input type="text" class="ai-name" value="${esc(p.name)}" data-idx="${i}">
+        </div>
+        <div class="ai-participant-row">
+          <label>角色/Prompt</label>
+          <textarea class="ai-prompt" data-idx="${i}">${esc(p.prompt)}</textarea>
+        </div>
+        <div class="ai-participant-row">
+          <label>提供商</label>
+          <select class="ai-provider" data-idx="${i}">
+            ${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${k === p.provider ? 'selected' : ''}>${v.icon} ${v.name}</option>`).join('')}
+          </select>
+          <label>模型</label>
+          <select class="ai-model" data-idx="${i}"></select>
+          <label>温度</label>
+          <select class="ai-temp" data-idx="${i}">
+            ${[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0].map(v => `<option value="${v}" ${v === p.temp ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>
+        </div>
+      `;
+      list.appendChild(div);
+
+      const providerSelect = div.querySelector('.ai-provider');
+      const modelSelect = div.querySelector('.ai-model');
+      function updateModels() {
+        const idx = parseInt(providerSelect.dataset.idx);
+        const prov = PROVIDERS[providerSelect.value];
+        const currentModel = state.participants[idx]?.model;
+        const valid = currentModel && prov.models.includes(currentModel);
+        modelSelect.innerHTML = prov.models.map(m => `<option value="${m}" ${m === (valid ? currentModel : prov.models[0]) ? 'selected' : ''}>${m}</option>`).join('');
+        if (!valid) state.participants[idx].model = prov.models[0];
+      }
+      updateModels();
+      providerSelect.addEventListener('change', () => {
+        const idx = parseInt(providerSelect.dataset.idx);
+        state.participants[idx].provider = providerSelect.value;
+        state.participants[idx].model = PROVIDERS[providerSelect.value].models[0];
+        updateModels();
+      });
+      modelSelect.addEventListener('change', () => {
+        const idx = parseInt(modelSelect.dataset.idx);
+        state.participants[idx].model = modelSelect.value;
+      });
+      div.querySelector('.ai-name').addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        state.participants[idx].name = e.target.value;
+      });
+      div.querySelector('.ai-prompt').addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        state.participants[idx].prompt = e.target.value;
+      });
+      div.querySelector('.ai-temp').addEventListener('change', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        state.participants[idx].temp = parseFloat(e.target.value);
+      });
+      div.querySelector('.remove-ai-btn').addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        if (state.participants.length <= 1) { showToast('至少保留一个 AI 参与者', 'warning'); return; }
+        state.participants.splice(idx, 1);
+        renderParticipants();
+      });
+    });
+  }
+
+  document.getElementById('addAiBtn').addEventListener('click', () => {
+    state.participants.push({ name: '新 AI', prompt: '你是一个有用的AI助手。', provider: 'deepseek', model: 'deepseek-chat', temp: 0.7 });
+    renderParticipants();
+  });
+
+  document.getElementById('startChatBtn').addEventListener('click', () => {
+    if (state.participants.length === 0) { showToast('请至少添加一个 AI 参与者', 'warning'); return; }
+    state.roomName = document.getElementById('roomNameInput').value.trim() || 'AI 聊天室';
+    state.rounds = parseInt(document.getElementById('roundsSelect').value);
+    state.autoStart = document.getElementById('autoStartCheck').checked;
+    state.messages = [];
+    state.currentRound = 0;
+    state.isDiscussing = false;
+    state.discussStopped = false;
+    document.getElementById('roomTitle').textContent = state.roomName;
+    document.getElementById('roomBadge').textContent = state.rounds + ' 轮讨论';
+    document.getElementById('roundCounter').textContent = '';
+    document.getElementById('messagesArea').innerHTML = '<div class="empty-chat" id="emptyChat"><div class="empty-icon">💬</div><div>在下方输入消息开始聊天</div><div style="font-size:12px;margin-top:8px">或点击 "🤖 自动讨论" 让 AI 们自主对话</div></div>';
+    document.getElementById('thinkingIndicator').style.display = 'none';
+    document.getElementById('stopDiscussBtn').style.display = 'none';
+    document.getElementById('sendMsgBtn').disabled = false;
+    document.getElementById('startDiscussBtn').disabled = false;
+    document.getElementById('chatInput').value = '';
+    switchPage('chatPage');
+  });
+
+  document.getElementById('settingsBackBtn').addEventListener('click', () => {
+    if (state.isDiscussing) { showToast('请先停止讨论再返回设置', 'warning'); return; }
+    switchPage('setupPage');
+    renderParticipants();
+  });
+
+  // ============ Chat Room ============
+  function switchPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(pageId).classList.add('active');
+  }
+
+  function addMessage(role, name, content, avatarColor) {
+    const area = document.getElementById('messagesArea');
+    const empty = document.getElementById('emptyChat');
+    if (empty) empty.remove();
+
+    const msg = document.createElement('div');
+    msg.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    if (role === 'user') {
+      label.textContent = '你';
+    } else {
+      const avatar = document.createElement('span');
+      avatar.className = 'msg-avatar';
+      avatar.style.background = avatarColor || '#6366f1';
+      avatar.textContent = (name || '?')[0];
+      label.appendChild(avatar);
+      const nameSpan = document.createElement('span');
+      nameSpan.style.color = avatarColor || '#6366f1';
+      nameSpan.style.fontWeight = '700';
+      nameSpan.textContent = name;
+      label.appendChild(nameSpan);
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.textContent = content;
+
+    const time = document.createElement('div');
+    time.className = 'msg-time';
+    time.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+
+    msg.appendChild(label);
+    msg.appendChild(bubble);
+    msg.appendChild(time);
+    area.appendChild(msg);
+    scrollToBottom();
+    return { msg, bubble };
+  }
+
+  function updateMessageBubble(bubble, content, done) {
+    if (done) {
+      bubble.innerHTML = renderMD(content);
+    } else {
+      bubble.textContent = content + ' █';
+    }
+    scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    const area = document.getElementById('messagesArea');
+    setTimeout(() => { area.scrollTop = area.scrollHeight; }, 50);
+  }
+
+  function setThinking(aiName) {
+    const indicator = document.getElementById('thinkingIndicator');
+    document.getElementById('thinkingText').textContent = aiName ? '🤔 ' + aiName + ' 思考中...' : '';
+    indicator.style.display = aiName ? 'flex' : 'none';
+  }
+
+  async function streamAI(participant, messages, signal) {
+    const p = PROVIDERS[participant.provider];
+    if (!p) throw new Error('未知提供商: ' + participant.provider);
+    const apiKey = getApiKey(participant.provider);
+    if (!apiKey) throw new Error(participant.name + ' 的 ' + p.name + ' API Key 未设置');
+
+    const body = p.buildBody(participant.model, messages, 4000, participant.temp);
+    body.stream = true;
+    const headers = { 'Content-Type': 'application/json', ...p.authHeader(apiKey) };
+    let url = typeof p.endpoint === 'function' ? p.endpoint(participant.model) : p.endpoint;
+    if (participant.provider === 'gemini') url += '?key=' + encodeURIComponent(apiKey) + '&alt=sse';
+
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    if (!response.ok) {
+      const t = await response.text();
+      let m = 'HTTP ' + response.status;
+      try { m = JSON.parse(t).error?.message || m; } catch {}
+      throw new Error('[' + p.name + '] ' + m);
+    }
+
+    if (participant.provider === 'claude' || participant.provider === 'qwen') {
+      const data = await response.json();
+      return p.parseResponse(data) || '';
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          const dataStr = trimmed.slice(6);
+          if (dataStr === '[DONE]') continue;
+          try {
+            const json = JSON.parse(dataStr);
+            if (participant.provider === 'gemini') {
+              const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) fullContent += text;
+              continue;
+            }
+            const delta = json.choices?.[0]?.delta;
+            if (delta?.content) fullContent += delta.content;
+          } catch(e) {}
+        }
+      }
+    } finally {}
+    return fullContent;
+  }
+
+  async function callSingleAI(participantIdx) {
+    const p = state.participants[participantIdx];
+    const color = state.participantColors[participantIdx % state.participantColors.length];
+    setThinking(p.name);
+
+    const msgs = [{ role: 'system', content: p.prompt }];
+    for (const m of state.messages) {
+      msgs.push({ role: m.role, content: m.content });
+    }
+
+    const { bubble } = addMessage('ai', p.name, '', color);
+
+    let fullContent = '';
+    try {
+      const ac = new AbortController();
+      if (state._abortController) state._abortController = ac;
+
+      const rawProviders = ['claude', 'qwen'];
+      const isRaw = rawProviders.includes(p.provider);
+
+      if (isRaw) {
+        fullContent = await streamAI(p, msgs, ac.signal);
+        updateMessageBubble(bubble, fullContent, true);
+      } else {
+        const result = await streamAI(p, msgs, ac.signal);
+        fullContent = result || '';
+        updateMessageBubble(bubble, fullContent, true);
+      }
+
+      if (!fullContent) fullContent = '（无响应）';
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        fullContent = '';
+      } else {
+        fullContent = '❌ ' + e.message;
+      }
+      bubble.textContent = fullContent;
+    }
+
+    setThinking(null);
+    if (fullContent) {
+      state.messages.push({ role: 'assistant', name: p.name, content: fullContent });
+    }
+    return fullContent;
+  }
+
+  async function startDiscussion() {
+    if (state.isDiscussing) return;
+    if (state.participants.length === 0) { showToast('没有 AI 参与者', 'warning'); return; }
+    if (state.messages.length === 0) { showToast('请先发送一条消息', 'warning'); return; }
+
+    const hasKey = state.participants.some(p => getApiKey(p.provider));
+    if (!hasKey) { showToast('请先设置至少一个 API Key（在 4.0.1 工作台中配置）', 'error'); return; }
+
+    state.isDiscussing = true;
+    state.discussStopped = false;
+    state.currentRound = 0;
+    document.getElementById('sendMsgBtn').disabled = true;
+    document.getElementById('startDiscussBtn').disabled = true;
+    document.getElementById('stopDiscussBtn').style.display = 'inline-flex';
+    document.getElementById('settingsBackBtn').disabled = true;
+
+    const totalRounds = state.rounds;
+
+    for (let r = 0; r < totalRounds; r++) {
+      if (state.discussStopped) break;
+      state.currentRound = r + 1;
+      document.getElementById('roundCounter').textContent = '讨论进度: ' + (r + 1) + '/' + totalRounds;
+
+      for (let aiIdx = 0; aiIdx < state.participants.length; aiIdx++) {
+        if (state.discussStopped) break;
+        await callSingleAI(aiIdx);
+        if (state.discussStopped) break;
+      }
+    }
+
+    finishDiscussion();
+  }
+
+  function finishDiscussion() {
+    state.isDiscussing = false;
+    document.getElementById('sendMsgBtn').disabled = false;
+    document.getElementById('startDiscussBtn').disabled = false;
+    document.getElementById('stopDiscussBtn').style.display = 'none';
+    document.getElementById('settingsBackBtn').disabled = false;
+    setThinking(null);
+    if (!state.discussStopped) {
+      showToast('✅ 讨论完成', 'success');
+    } else {
+      showToast('⏹️ 讨论已停止', 'info');
+    }
+  }
+
+  // ============ Event Handlers ============
+  document.getElementById('sendMsgBtn').addEventListener('click', async () => {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    input.style.height = 'auto';
+
+    addMessage('user', '你', text);
+    state.messages.push({ role: 'user', name: '你', content: text });
+
+    if (state.autoStart) {
+      await startDiscussion();
+    }
+  });
+
+  document.getElementById('startDiscussBtn').addEventListener('click', async () => {
+    const hasPrevMsg = state.messages.length > 0;
+    if (!hasPrevMsg) {
+      showToast('请先发送一条消息开始对话', 'warning');
+      return;
+    }
+    await startDiscussion();
+  });
+
+  document.getElementById('stopDiscussBtn').addEventListener('click', () => {
+    state.discussStopped = true;
+    if (state._abortController) {
+      try { state._abortController.abort(); } catch(e) {}
+    }
+  });
+
+  document.getElementById('chatInput').addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('sendMsgBtn').click();
+    }
+  });
+
+  document.getElementById('chatInput').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  // ============ Theme ============
+  document.getElementById('setupThemeBtn').addEventListener('click', () => {
+    state.darkMode = !state.darkMode;
+    applyTheme();
+  });
+
+  document.getElementById('chatThemeBtn').addEventListener('click', () => {
+    state.darkMode = !state.darkMode;
+    applyTheme();
+  });
+
+  // ============ Init ============
+  renderParticipants();
+  applyTheme();
+})();
+</script>
+</body>
+</html>
