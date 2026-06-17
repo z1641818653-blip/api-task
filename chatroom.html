@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>AI 聊天室</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+:root {
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-input: #f7f8fa;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+  --accent-blue: #6366f1;
+  --accent-blue-hover: #4f46e5;
+  --accent-blue-light: rgba(99,102,241,0.08);
+  --accent-green: #10b981;
+  --accent-red: #ef4444;
+  --accent-yellow: #fbbf24;
+  --accent-orange: #f59e0b;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --msg-font-size: 14px;
+  --ui-font-size: 13px;
+}
+[data-theme="dark"] {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-input: #1c2333;
+  --text-primary: #f0f0f0;
+  --text-secondary: #b0b8c4;
+  --border-color: #30363d;
+  --accent-blue: #7c8dff;
+  --accent-blue-hover: #6b7dff;
+  --accent-blue-light: rgba(124,141,255,0.12);
+  --accent-green: #3dd68c;
+  --accent-red: #f87171;
+  --accent-yellow: #f0c040;
+  --accent-orange: #fb923c;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.45);
+}
+[data-theme="dark"] .sidebar-section { background: linear-gradient(135deg, #1c2333 0%, #161b22 100%); }
+[data-theme="dark"] .ai-card { background: #1c2333; border-color: #30363d; }
+[data-theme="dark"] .ai-card select,
+[data-theme="dark"] .ai-card input,
+[data-theme="dark"] .ai-card textarea { background: #161b22; color: #f0f0f0; border-color: #30363d; }
+[data-theme="dark"] .msg-bubble.ai { background: #1c2333; border-color: #30363d; }
+[data-theme="dark"] .thinking-indicator { background: #1c2333; border-color: #30363d; }
+[data-theme="dark"] .history-item:hover { border-color: rgba(124,141,255,0.2); }
+[data-theme="dark"] .sidebar-toggle { background: #161b22; border-color: #30363d; }
+[data-theme="dark"] .sidebar-toggle:hover { background: rgba(124,141,255,0.12); color: #7c8dff; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'PingFang SC', sans-serif; background: var(--bg-primary); color: var(--text-primary); height: 100vh; display: flex; overflow: hidden; font-size: var(--ui-font-size); }
+
+.app-layout { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
+
+.sidebar { width: 340px; min-width: 340px; background: var(--bg-secondary); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 14px; gap: 10px; overflow-y: auto; transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); position: relative; z-index: 10; }
+.sidebar.collapsed { width: 0; min-width: 0; padding: 14px 0; overflow: hidden; border-right: none; opacity: 0; }
+.sidebar-section { background: linear-gradient(135deg, #f8f9fe 0%, #f3f4fb 100%); border-radius: var(--radius-lg); padding: 12px; border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; }
+.sidebar-section:hover { box-shadow: var(--shadow-md); }
+.sidebar-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
+.sidebar-section h4 { font-size: 12px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; color: var(--text-primary); }
+
+.ai-card { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 10px; margin-bottom: 6px; position: relative; transition: border-color 0.2s; }
+.ai-card:hover { border-color: var(--accent-blue); }
+.ai-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.ai-avatar { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; flex-shrink: 0; }
+.ai-card-name { flex: 1; font-size: 12px; font-weight: 700; color: var(--text-primary); }
+    .ai-card .remove-btn { border: none; background: transparent; color: var(--text-secondary); font-size: 10px; cursor: pointer; padding: 3px 8px; border-radius: 5px; transition: all 0.15s; margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; }
+    .ai-card .remove-btn:hover { background: rgba(239,68,68,0.12); color: var(--accent-red); }
+    .ai-lock-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); font-size: 10px; padding: 2px 8px; border-radius: 10px; cursor: pointer; transition: all 0.15s; font-weight: 600; white-space: nowrap; }
+    .ai-lock-btn:hover { background: var(--accent-blue-light); border-color: var(--accent-blue); color: var(--accent-blue); }
+    .ai-lock-btn.locked { background: transparent; border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.ai-card-field { margin-bottom: 4px; }
+.ai-card-field label { font-size: 10px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px; }
+.ai-card-field input,
+.ai-card-field select,
+.ai-card-field textarea { width: 100%; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 11px; outline: none; background: var(--bg-secondary); color: var(--text-primary); transition: border-color 0.2s; font-family: inherit; }
+.ai-card-field input:focus,
+.ai-card-field select:focus,
+.ai-card-field textarea:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 2px var(--accent-blue-light); }
+.ai-card-field textarea { min-height: 36px; resize: vertical; }
+.ai-card-row { display: flex; gap: 4px; }
+.ai-card-row select { flex: 1; min-width: 0; }
+.temp-slider-wrap { display: flex; align-items: center; gap: 4px; }
+.temp-slider-wrap input[type="range"] { flex: 1; height: 4px; accent-color: var(--accent-blue); cursor: pointer; }
+.temp-slider-wrap .temp-val { font-size: 10px; color: var(--text-secondary); min-width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.add-ai-btn { width: 100%; padding: 5px; border-radius: 12px; border: 1px dashed var(--border-color); background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; transition: all 0.15s; font-weight: 600; margin-top: 2px; }
+.add-ai-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-light); }
+
+.ai-header-btn { width: 18px; height: 18px; border-radius: 50%; border: none; background: transparent; color: var(--text-secondary); font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+.ai-header-btn:hover { background: rgba(99,102,241,0.1); color: var(--accent-blue); }
+
+
+.ai-card-body { transition: max-height 0.2s ease, opacity 0.2s ease; overflow: hidden; }
+
+.setting-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.setting-row label { font-size: 11px; font-weight: 600; color: var(--text-primary); min-width: 52px; }
+.setting-row input[type="text"],
+.setting-row select { flex: 1; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 5px; font-size: 11px; outline: none; background: var(--bg-secondary); color: var(--text-primary); }
+.setting-row input[type="text"]:focus,
+.setting-row select:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 2px var(--accent-blue-light); }
+.setting-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent-blue); flex-shrink: 0; }
+.setting-row .chk-label { font-size: 11px; color: var(--text-secondary); }
+
+.history-section { margin-top: auto; }
+.history-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.history-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: space-between; border: 1px solid transparent; gap: 4px; transition: all 0.15s; }
+.history-item:hover { background: var(--accent-blue-light); border-color: rgba(99,102,241,0.15); }
+.history-item .h-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-item .h-date { font-size: 9px; color: var(--text-secondary); white-space: nowrap; }
+.history-item .h-del { color: var(--text-secondary); cursor: pointer; padding: 1px 4px; border-radius: 3px; font-size: 10px; opacity: 0; transition: opacity 0.15s; }
+.history-item:hover .h-del { opacity: 1; }
+.history-item .h-del:hover { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-primary); }
+.top-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); box-shadow: var(--shadow-sm); z-index: 10; flex-shrink: 0; }
+.top-bar-left { display: flex; align-items: center; gap: 10px; }
+.top-bar-left .sidebar-toggle { width: 24px; height: 30px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 9px; color: var(--text-secondary); transition: all 0.2s; flex-shrink: 0; }
+.top-bar-left .sidebar-toggle:hover { background: var(--accent-blue-light); color: var(--accent-blue); border-color: var(--accent-blue); }
+.top-bar-left h2 { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-bar-actions { display: flex; gap: 6px; align-items: center; }
+.top-btn { padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.top-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-light); }
+.top-btn.active { background: var(--accent-blue); color: white; border-color: transparent; }
+
+.messages-area { flex: 1; overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+@keyframes msgFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.msg { display: flex; flex-direction: column; gap: 2px; max-width: 100%; animation: msgFadeIn 0.3s ease; }
+.msg.user { align-items: flex-end; }
+.msg.ai { align-items: flex-start; }
+.msg-header { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.msg-header .msg-avatar { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: white; flex-shrink: 0; }
+.msg-header .msg-name { font-size: 11px; font-weight: 700; }
+.msg-header .msg-time { font-size: 9px; color: var(--text-secondary); opacity: 0.5; }
+.msg-bubble { padding: 8px 14px; border-radius: var(--radius-md); max-width: 85%; word-wrap: break-word; line-height: 1.65; font-size: var(--msg-font-size); position: relative; }
+.msg.user .msg-bubble { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border-bottom-right-radius: 4px; box-shadow: 0 2px 8px rgba(99,102,241,0.2); }
+.msg.ai .msg-bubble { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-bottom-left-radius: 4px; box-shadow: var(--shadow-sm); }
+.msg.ai .msg-bubble h1, .msg.ai .msg-bubble h2, .msg.ai .msg-bubble h3 { margin-top: 12px; margin-bottom: 6px; font-weight: 700; }
+.msg.ai .msg-bubble h1 { font-size: 1.3em; }
+.msg.ai .msg-bubble h2 { font-size: 1.15em; }
+.msg.ai .msg-bubble h3 { font-size: 1.05em; }
+.msg.ai .msg-bubble p { margin-bottom: 8px; }
+.msg.ai .msg-bubble p:last-child { margin-bottom: 0; }
+.msg.ai .msg-bubble code { background: var(--bg-input); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'JetBrains Mono', monospace; font-size: 0.9em; color: var(--accent-red); }
+.msg.ai .msg-bubble pre { background: #1e1e2e; color: #e0e0e0; padding: 12px; border-radius: var(--radius-sm); overflow-x: auto; margin: 10px 0; border: 1px solid #2e2e3e; }
+.msg.ai .msg-bubble pre code { background: none; padding: 0; color: inherit; font-size: 0.85em; }
+.msg.ai .msg-bubble ul, .msg.ai .msg-bubble ol { margin-left: 20px; margin-bottom: 8px; }
+.msg.ai .msg-bubble li { margin-bottom: 3px; }
+.msg.ai .msg-bubble blockquote { border-left: 3px solid var(--accent-blue); padding: 5px 12px; margin: 8px 0; color: var(--text-secondary); background: var(--bg-input); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.msg.ai .msg-bubble table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 12px; }
+.msg.ai .msg-bubble th, .msg.ai .msg-bubble td { border: 1px solid var(--border-color); padding: 6px 10px; text-align: left; }
+.msg.ai .msg-bubble th { background: var(--bg-input); font-weight: 600; }
+.msg.ai .msg-bubble tr:nth-child(even) { background: var(--bg-input); }
+.thinking-indicator { display: none; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 11px; color: var(--text-secondary); margin: 4px 18px; }
+.thinking-indicator .spinner { width: 12px; height: 12px; border: 2px solid rgba(99,102,241,0.2); border-radius: 50%; border-top-color: var(--accent-blue); animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-chat { text-align: center; color: var(--text-secondary); padding: 50px 20px; font-size: 13px; line-height: 1.8; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.empty-chat .empty-icon { font-size: 42px; margin-bottom: 12px; }
+.typing-cursor { display: inline-block; animation: blinkCursor 0.8s step-end infinite; }
+@keyframes blinkCursor { 50% { opacity: 0; } }
+.input-area-wrap { flex-shrink: 0; background: var(--bg-secondary); border-top: 1px solid var(--border-color); padding: 10px 18px; }
+.input-row { display: flex; gap: 8px; align-items: flex-end; }
+.input-row textarea { flex: 1; min-height: 40px; max-height: 100px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 12px; font-family: inherit; font-size: var(--ui-font-size); resize: none; outline: none; overflow-y: auto; transition: border-color 0.2s; line-height: 1.5; color: var(--text-primary); }
+.input-row textarea:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px var(--accent-blue-light); }
+.input-row textarea::placeholder { color: #9ca3af; }
+.input-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.send-btn { padding: 7px 18px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border: none; color: white; font-weight: 600; border-radius: 16px; font-size: 12px; cursor: pointer; box-shadow: 0 2px 8px rgba(99,102,241,0.25); transition: all 0.2s; white-space: nowrap; }
+.send-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,0.35); }
+.send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.discuss-btn { padding: 7px 14px; background: transparent; border: 1px solid var(--accent-green); color: var(--accent-green); font-weight: 600; border-radius: 16px; font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.discuss-btn:hover { background: rgba(16,185,129,0.08); }
+.discuss-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.stop-discuss-btn { padding: 7px 14px; background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); font-weight: 600; border-radius: 16px; font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; display: none; }
+.stop-discuss-btn:hover { background: rgba(239,68,68,0.08); }
+.round-counter { font-size: 11px; color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+
+#toastContainer { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { padding: 8px 20px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; box-shadow: var(--shadow-lg); animation: toastIn 0.3s ease, toastOut 0.3s ease 2.2s forwards; pointer-events: auto; max-width: 400px; text-align: center; line-height: 1.5; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
+.toast.success { background: #10b981; color: white; }
+.toast.error { background: #ef4444; color: white; }
+.toast.warning { background: #f59e0b; color: white; }
+.toast.info { background: #6366f1; color: white; }
+[data-theme="dark"] .toast.success { background: #059669; }
+[data-theme="dark"] .toast.error { background: #dc2626; }
+[data-theme="dark"] .toast.warning { background: #d97706; }
+[data-theme="dark"] .toast.info { background: #4f46e5; }
+
+@media (max-width: 600px) {
+  .sidebar { width: 280px; min-width: 280px; padding: 10px; }
+  .sidebar.collapsed { width: 0; min-width: 0; padding: 10px 0; }
+  .messages-area { padding: 10px 12px; }
+  .input-area-wrap { padding: 8px 12px; }
+  .input-row { flex-wrap: wrap; }
+  .input-row textarea { min-width: 100%; }
+  .input-actions { width: 100%; justify-content: flex-end; margin-top: 4px; }
+  .msg-bubble { max-width: 95%; }
+  .top-bar { padding: 8px 12px; }
+  .top-bar-left h2 { font-size: 13px; }
+  .ai-card-field textarea { min-height: 30px; }
+}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div class="confirm-overlay" id="confirmOverlay" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+  <div style="background:var(--bg-secondary);border-radius:var(--radius-xl);padding:24px;min-width:280px;max-width:380px;text-align:center;box-shadow:var(--shadow-lg);animation:modalIn 0.2s ease">
+    <p id="confirmMsg" style="font-size:14px;margin-bottom:18px;line-height:1.6;color:var(--text-primary)"></p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button id="confirmNo" style="padding:8px 24px;border-radius:16px;border:1px solid var(--border-color);background:transparent;color:var(--text-secondary);font-size:13px;cursor:pointer;font-weight:600">取消</button>
+      <button id="confirmYes" style="padding:8px 24px;border-radius:16px;border:1px solid var(--accent-red);background:transparent;color:var(--accent-red);font-size:13px;cursor:pointer;font-weight:600">确认删除</button>
+    </div>
+  </div>
+</div>
+<div class="app-layout">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <h3>💬 AI 成员</h3>
+      <div id="aiList"></div>
+      <button id="addAiBtn" class="add-ai-btn">➕ 添加 AI</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>⚙️ 房间设置</h3>
+      <div class="setting-row">
+        <label>名称</label>
+        <input type="text" id="roomNameInput" value="AI 聊天室">
+      </div>
+      <div class="setting-row">
+        <label>轮数</label>
+        <select id="roundsSelect">
+          <option value="1">1 轮</option>
+          <option value="2">2 轮</option>
+          <option value="3" selected>3 轮</option>
+          <option value="5">5 轮</option>
+          <option value="10">10 轮</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <input type="checkbox" id="autoStartCheck" checked>
+        <span class="chk-label">发送消息后 AI 自动讨论</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section history-section" id="historySection" style="display:none">
+      <h3>📂 历史聊天室</h3>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:auto">
+      <button id="newRoomBtn" style="width:100%;padding:6px;border-radius:12px;border:1px dashed var(--border-color);background:transparent;color:var(--text-secondary);font-size:11px;cursor:pointer;transition:all 0.15s;font-weight:600;margin-bottom:6px" onmouseover="this.style.borderColor='var(--accent-blue)';this.style.color='var(--accent-blue)';this.style.background='var(--accent-blue-light)'" onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-secondary)';this.style.background='transparent'">🆕 新建房间</button>
+      <button id="themeBtn" style="width:100%;padding:6px;border-radius:12px;border:1px solid var(--border-color);background:transparent;color:var(--text-secondary);font-size:11px;cursor:pointer;transition:all 0.15s;font-weight:600" onmouseover="this.style.borderColor='var(--accent-blue)';this.style.color='var(--accent-blue)';this.style.background='var(--accent-blue-light)'" onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-secondary)';this.style.background='transparent'">🌙 暗色模式</button>
+    </div>
+  </div>
+
+  <div class="main-area" id="mainArea">
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <button class="sidebar-toggle" id="sidebarToggle">◀</button>
+        <a href="index.html" style="font-size:11px;color:var(--text-secondary);text-decoration:none;padding:2px 8px;border-radius:6px;border:1px solid var(--border-color);transition:all .15s;white-space:nowrap;flex-shrink:0" onmouseover="this.style.borderColor='var(--accent-blue)';this.style.color='var(--accent-blue)'" onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-secondary)'">← 主页</a>
+        <h2 id="roomTitle">AI 聊天室</h2>
+        <span style="font-size:10px;color:var(--text-secondary);background:var(--bg-input);padding:1px 8px;border-radius:10px;white-space:nowrap" id="roomBadge">3 轮</span>
+      </div>
+      <div class="top-bar-actions">
+        <span class="round-counter" id="roundCounter"></span>
+        <button id="clearChatBtn" class="top-btn" title="清空聊天">🗑️ 清空</button>
+      </div>
+    </div>
+
+    <div id="thinkingIndicator" class="thinking-indicator">
+      <div class="spinner"></div>
+      <span id="thinkingText">AI 思考中...</span>
+    </div>
+
+    <div class="messages-area" id="messagesArea">
+      <div class="empty-chat" id="emptyChat">
+        <div class="empty-icon">💬</div>
+        <div>在下方输入消息开始聊天</div>
+        <div style="font-size:11px;margin-top:6px">或点击 "🤖 开始自动讨论" 让 AI 们自主对话</div>
+      </div>
+    </div>
+
+    <div class="input-area-wrap">
+      <div class="input-row">
+        <textarea id="chatInput" placeholder="输入消息..." rows="1"></textarea>
+        <div class="input-actions">
+          <button id="sendMsgBtn" class="send-btn">发送</button>
+          <button id="startDiscussBtn" class="discuss-btn">🤖 开始自动讨论</button>
+          <button id="stopDiscussBtn" class="stop-discuss-btn">⏹️ 停止</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
+
+  const PROVIDERS = {
+    deepseek: { name: 'DeepSeek', icon: '🟢', models: ['deepseek-chat', 'deepseek-reasoner'], endpoint: 'https://api.deepseek.com/v1/chat/completions', authHeader: (key) => ({ 'Authorization': 'Bearer ' + key }), buildBody: (model, messages, mt, temp) => ({ model, messages, temperature: temp ?? 0.7, max_tokens: mt }), parseResponse: (data) => data.choices?.[0]?.message?.content },
+    openai: { name: 'OpenAI', icon: '🟣', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'o3-mini'], endpoint: 'https://api.openai.com/v1/chat/completions', authHeader: (key) => ({ 'Authorization': 'Bearer ' + key }), buildBody: (model, messages, mt, temp) => ({ model, messages, temperature: temp ?? 0.7, max_tokens: mt }), parseResponse: (data) => data.choices?.[0]?.message?.content },
+    claude: { name: 'Claude', icon: '🟠', models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'], endpoint: 'https://api.anthropic.com/v1/messages', authHeader: (key) => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01' }), buildBody: (model, messages, mt, temp) => { const sm = messages.find(m => m.role === 'system'); const cm = messages.filter(m => m.role !== 'system'); const b = { model, max_tokens: mt, temperature: temp ?? 0.7, messages: cm.map(m => ({ role: m.role, content: m.content })) }; if (sm) b.system = sm.content; return b; }, parseResponse: (data) => data.content?.[0]?.text },
+    gemini: { name: 'Gemini', icon: '🔵', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'], endpoint: (model) => 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', authHeader: () => ({}), buildBody: (model, messages, mt, temp) => { const contents = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })); const sm = messages.find(m => m.role === 'system'); const b = { contents, generationConfig: { maxOutputTokens: mt, temperature: temp ?? 0.7 } }; if (sm) b.systemInstruction = { parts: [{ text: sm.content }] }; return b; }, parseResponse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text },
+    qwen: { name: '千问', icon: '🔴', models: ['qwen3-235b', 'qwen3-30b', 'qwen3-turbo'], endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', authHeader: (key) => ({ 'Authorization': 'Bearer ' + key }), buildBody: (model, messages, mt, temp) => ({ model, messages, temperature: temp ?? 0.7, max_tokens: mt }), parseResponse: (data) => data.choices?.[0]?.message?.content }
+  };
+
+  function getApiKey(provider) {
+    try {
+      const raw = localStorage.getItem('dp49');
+      if (raw) {
+        const providers = JSON.parse(raw);
+        if (providers[provider] && providers[provider].apiKey) {
+          try { return decodeURIComponent(atob(providers[provider].apiKey)); } catch {}
+          return providers[provider].apiKey;
+        }
+      }
+    } catch {}
+    if (provider === 'deepseek') return localStorage.getItem('dk30') || '';
+    return '';
+  }
+
+  const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+  function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+  function renderMD(content) {
+    if (!content) return '';
+    if (typeof marked !== 'undefined') {
+      try { return marked.parse(content); } catch(e) {}
+    }
+    return esc(content).replace(/\n/g, '<br>');
+  }
+
+  function showConfirm(msg, cb) {
+    const overlay = document.getElementById('confirmOverlay');
+    document.getElementById('confirmMsg').textContent = msg;
+    overlay.style.display = 'flex';
+    const yes = document.getElementById('confirmYes');
+    const no = document.getElementById('confirmNo');
+    function cleanup() { overlay.style.display = 'none'; yes.removeEventListener('click', onYes); no.removeEventListener('click', cleanup); }
+    function onYes() { cleanup(); cb(); }
+    yes.addEventListener('click', onYes);
+    no.addEventListener('click', cleanup);
+  }
+
+  function showToast(msg, type) {
+    type = type || 'info';
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => { if (t.parentNode) t.remove(); }, 2500);
+  }
+
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  const DEFAULTS = [
+    { name: '理性派', prompt: '你是一个理性冷静的分析师，逻辑严密，喜欢用数据和事实说话。', provider: 'deepseek', model: 'deepseek-chat', temp: 0.5, collapsed: false, locked: false },
+    { name: '毒舌君', prompt: '你是一个毒舌吐槽专家，说话一针见血，幽默讽刺，但观点有道理。', provider: 'openai', model: 'gpt-4o-mini', temp: 0.9, collapsed: false, locked: false },
+    { name: '温柔姐', prompt: '你是一个温柔体贴的心理咨询师，说话温暖包容，善于鼓励他人。', provider: 'deepseek', model: 'deepseek-chat', temp: 0.7, collapsed: false, locked: false }
+  ];
+
+  function normalizeParticipant(p) {
+    return { ...p, collapsed: p.collapsed === true, locked: p.locked === true };
+  }
+
+  function createRoom(name, participants, rounds, autoStart) {
+    return {
+      id: generateId(),
+      name: name || 'AI 聊天室',
+      participants: (participants || JSON.parse(JSON.stringify(DEFAULTS))).map(normalizeParticipant),
+      messages: [],
+      rounds: rounds || 3,
+      autoStart: autoStart !== undefined ? autoStart : true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  function saveRoom(room) {
+    if (!room) return;
+    room.updatedAt = new Date().toISOString();
+    try { localStorage.setItem('chatroom_' + room.id, JSON.stringify(room)); } catch(e) {}
+  }
+
+  function loadRoom(id) {
+    try {
+      const data = localStorage.getItem('chatroom_' + id);
+      if (data) return JSON.parse(data);
+    } catch(e) {}
+    return null;
+  }
+
+  function listRooms() {
+    const rooms = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('chatroom_')) {
+          try {
+            const data = JSON.parse(localStorage.getItem(key));
+            if (data && data.id) rooms.push({ id: data.id, name: data.name, updatedAt: data.updatedAt });
+          } catch {}
+        }
+      }
+    } catch {}
+    rooms.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    return rooms;
+  }
+
+  function deleteRoom(id) {
+    try { localStorage.removeItem('chatroom_' + id); } catch(e) {}
+  }
+
+  let state = {
+    room: null,
+    isDiscussing: false,
+    discussStopped: false,
+    currentRound: 0,
+    darkMode: localStorage.getItem('chatroom_dark') === 'true',
+    sidebarOpen: localStorage.getItem('chatroom_sidebar') !== 'closed',
+    _aborters: []
+  };
+
+  function initRoom(room) {
+    room.participants = room.participants.map(normalizeParticipant);
+    state.room = room;
+    state.isDiscussing = false;
+    state.discussStopped = false;
+    state.currentRound = 0;
+    state._aborters = [];
+    renderSidebar();
+    renderMessages();
+    updateHeader();
+    updateHistory();
+  }
+
+  function newRoom() {
+    const room = createRoom('AI 聊天室', null, 3, true);
+    saveRoom(room);
+    initRoom(room);
+    showToast('✅ 已创建新房间', 'success');
+  }
+
+  function loadRoomById(id) {
+    const room = loadRoom(id);
+    if (room) {
+      initRoom(room);
+      showToast('📂 已加载: ' + room.name, 'info');
+    } else {
+      showToast('❌ 房间数据不存在', 'error');
+    }
+  }
+
+  function applyTheme() {
+    const dark = state.darkMode;
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.getElementById('themeBtn').textContent = dark ? '☀️ 亮色模式' : '🌙 暗色模式';
+    localStorage.setItem('chatroom_dark', dark);
+  }
+
+  function updateSidebarState() {
+    const sb = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    if (state.sidebarOpen) {
+      sb.classList.remove('collapsed');
+      toggle.textContent = '◀';
+    } else {
+      sb.classList.add('collapsed');
+      toggle.textContent = '▶';
+    }
+    localStorage.setItem('chatroom_sidebar', state.sidebarOpen ? 'open' : 'closed');
+  }
+
+  function renderSidebar() {
+    if (!state.room) return;
+    const room = state.room;
+    document.getElementById('roomNameInput').value = room.name;
+    document.getElementById('roundsSelect').value = room.rounds;
+    document.getElementById('autoStartCheck').checked = room.autoStart;
+
+    const list = document.getElementById('aiList');
+    list.innerHTML = '';
+    room.participants.forEach((p, i) => {
+      const color = COLORS[i % COLORS.length];
+      const collapsed = p.collapsed === true;
+      const locked = p.locked === true;
+      const disabledAttr = locked ? 'disabled' : '';
+
+      const card = document.createElement('div');
+      card.className = 'ai-card';
+      card.innerHTML = `
+        <div class="ai-card-header">
+          <div class="ai-avatar" style="background:${color}">${esc(p.name[0] || '?')}</div>
+          <input class="ai-card-name" value="${esc(p.name)}" data-idx="${i}" placeholder="输入名称" style="border:1px solid var(--border-color);border-radius:5px;background:var(--bg-secondary);color:var(--text-primary);font-weight:600;font-size:12px;outline:none;flex:1;font-family:inherit;min-width:40px;padding:4px 6px;transition:border-color .15s" ${disabledAttr}>
+          <button class="ai-header-btn" data-idx="${i}" data-action="toggle" title="${collapsed ? '展开' : '折叠'}">${collapsed ? '▶' : '▼'}</button>
+        </div>
+        <div class="ai-card-body" style="${collapsed ? 'display:none' : ''}">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+            <button class="ai-lock-btn ${locked ? 'locked' : ''}" data-idx="${i}" data-action="lock" style="flex:1">${locked ? '已锁定' : '未锁定'}</button>
+            <button class="remove-btn" data-idx="${i}" style="flex:1">✕ 移除</button>
+          </div>
+          <div class="ai-card-field">
+            <label>角色提示</label>
+            <textarea data-idx="${i}" class="ai-prompt" ${disabledAttr} placeholder="例：你是一个毒舌点评师...">${esc(p.prompt)}</textarea>
+          </div>
+          <div class="ai-card-row">
+            <div class="ai-card-field" style="flex:1">
+              <label>提供商</label>
+              <select class="ai-provider" data-idx="${i}" ${disabledAttr}>
+                ${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${k === p.provider ? 'selected' : ''}>${v.icon} ${v.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="ai-card-field" style="flex:1">
+              <label>模型</label>
+              <select class="ai-model" data-idx="${i}" ${disabledAttr}></select>
+            </div>
+          </div>
+          <div class="ai-card-field">
+            <label>温度: <span class="temp-val" data-idx="${i}">${p.temp}</span></label>
+            <div class="temp-slider-wrap">
+              <input type="range" min="0" max="1" step="0.05" value="${p.temp}" class="ai-temp" data-idx="${i}" ${disabledAttr}>
+            </div>
+          </div>
+        </div>
+      `;
+      list.appendChild(card);
+
+      const provSel = card.querySelector('.ai-provider');
+      const modelSel = card.querySelector('.ai-model');
+      function updateModels() {
+        const prov = PROVIDERS[provSel.value];
+        const curModel = room.participants[i]?.model;
+        const valid = curModel && prov.models.includes(curModel);
+        modelSel.innerHTML = prov.models.map(m => `<option value="${m}" ${m === (valid ? curModel : prov.models[0]) ? 'selected' : ''}>${m}</option>`).join('');
+        if (!valid) room.participants[i].model = prov.models[0];
+      }
+      updateModels();
+
+      if (!locked) {
+        provSel.addEventListener('change', () => {
+          if (room.participants[i]?.locked) return;
+          room.participants[i].provider = provSel.value;
+          room.participants[i].model = PROVIDERS[provSel.value].models[0];
+          updateModels();
+          saveRoom(room);
+        });
+        modelSel.addEventListener('change', () => {
+          if (room.participants[i]?.locked) return;
+          room.participants[i].model = modelSel.value;
+          saveRoom(room);
+        });
+        card.querySelector('.ai-card-name').addEventListener('input', (e) => {
+          if (room.participants[i]?.locked) return;
+          room.participants[i].name = e.target.value;
+          saveRoom(room);
+        });
+        card.querySelector('.ai-prompt').addEventListener('input', (e) => {
+          if (room.participants[i]?.locked) return;
+          room.participants[i].prompt = e.target.value;
+          saveRoom(room);
+        });
+        card.querySelector('.ai-temp').addEventListener('input', (e) => {
+          if (room.participants[i]?.locked) return;
+          room.participants[i].temp = parseFloat(e.target.value);
+          const valSpan = card.querySelector('.temp-val');
+          if (valSpan) valSpan.textContent = room.participants[i].temp.toFixed(2);
+          saveRoom(room);
+        });
+      }
+
+      card.querySelector('.remove-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (room.participants.length <= 1) { showToast('至少保留一个 AI 成员', 'warning'); return; }
+        showConfirm('确定移除「' + room.participants[i].name + '」吗？', function() {
+          room.participants.splice(i, 1);
+          saveRoom(room);
+          renderSidebar();
+        });
+      });
+
+      card.querySelector('[data-action="toggle"]').addEventListener('click', () => {
+        room.participants[i].collapsed = !room.participants[i].collapsed;
+        saveRoom(room);
+        renderSidebar();
+      });
+
+      card.querySelector('[data-action="lock"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        room.participants[i].locked = !room.participants[i].locked;
+        saveRoom(room);
+        renderSidebar();
+      });
+    });
+  }
+
+  function updateHeader() {
+    if (!state.room) return;
+    document.getElementById('roomTitle').textContent = state.room.name;
+    document.getElementById('roomBadge').textContent = state.room.rounds + ' 轮';
+  }
+
+  function renderMessages() {
+    const area = document.getElementById('messagesArea');
+    const empty = document.getElementById('emptyChat');
+    area.innerHTML = '';
+    area.appendChild(empty.cloneNode(true));
+
+    if (!state.room) return;
+    const room = state.room;
+    room.messages.forEach(m => {
+      if (m.role === 'user') {
+        addMessageDOM('user', null, m.content, null, m.timestamp);
+      } else {
+        addMessageDOM('ai', m.name, m.content, COLORS[room.participants.findIndex(p => p.name === m.name) % COLORS.length], m.timestamp);
+      }
+    });
+    scrollToBottom();
+  }
+
+  function addMessageDOM(role, name, content, color, timestamp) {
+    const area = document.getElementById('messagesArea');
+    const empty = document.getElementById('emptyChat');
+    if (empty && empty.parentNode) {
+      const clone = empty.cloneNode(true);
+      empty.remove();
+    }
+
+    const msg = document.createElement('div');
+    msg.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+
+    const header = document.createElement('div');
+    header.className = 'msg-header';
+    if (role === 'user') {
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'msg-name';
+      nameSpan.textContent = '你';
+      header.appendChild(nameSpan);
+    } else {
+      const avatar = document.createElement('span');
+      avatar.className = 'msg-avatar';
+      avatar.style.background = color || '#6366f1';
+      avatar.textContent = (name || '?')[0];
+      header.appendChild(avatar);
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'msg-name';
+      nameSpan.style.color = color || '#6366f1';
+      nameSpan.textContent = name;
+      header.appendChild(nameSpan);
+    }
+    const time = document.createElement('span');
+    time.className = 'msg-time';
+    time.textContent = timestamp || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    header.appendChild(time);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.innerHTML = renderMD(content);
+
+    msg.appendChild(header);
+    msg.appendChild(bubble);
+    area.appendChild(msg);
+    scrollToBottom();
+    return { msg, bubble };
+  }
+
+  function updateBubble(bubble, content, done) {
+    if (done) {
+      bubble.innerHTML = renderMD(content);
+    } else {
+      bubble.textContent = content + ' █';
+    }
+    scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    const area = document.getElementById('messagesArea');
+    setTimeout(() => { area.scrollTop = area.scrollHeight; }, 30);
+  }
+
+  function setThinking(name) {
+    const indicator = document.getElementById('thinkingIndicator');
+    document.getElementById('thinkingText').textContent = name ? '⏳ ' + name + ' 正在思考...' : '';
+    indicator.style.display = name ? 'flex' : 'none';
+  }
+
+  async function streamAI(participant, messages, signal) {
+    const p = PROVIDERS[participant.provider];
+    if (!p) throw new Error('未知提供商: ' + participant.provider);
+    const apiKey = getApiKey(participant.provider);
+    if (!apiKey) throw new Error(participant.name + ' 的 ' + p.name + ' API Key 未设置');
+
+    const body = p.buildBody(participant.model, messages, 4000, participant.temp);
+    body.stream = true;
+    const headers = { 'Content-Type': 'application/json', ...p.authHeader(apiKey) };
+    let url = typeof p.endpoint === 'function' ? p.endpoint(participant.model) : p.endpoint;
+    if (participant.provider === 'gemini') url += '?key=' + encodeURIComponent(apiKey) + '&alt=sse';
+
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    if (!response.ok) {
+      const t = await response.text();
+      let m = 'HTTP ' + response.status;
+      try { m = JSON.parse(t).error?.message || m; } catch {}
+      throw new Error('[' + p.name + '] ' + m);
+    }
+
+    if (participant.provider === 'claude' || participant.provider === 'qwen') {
+      const data = await response.json();
+      return p.parseResponse(data) || '';
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+        const dataStr = trimmed.slice(6);
+        if (dataStr === '[DONE]') continue;
+        try {
+          const json = JSON.parse(dataStr);
+          if (participant.provider === 'gemini') {
+            const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) fullContent += text;
+            continue;
+          }
+          const delta = json.choices?.[0]?.delta;
+          if (delta?.content) fullContent += delta.content;
+        } catch(e) {}
+      }
+    }
+    return fullContent;
+  }
+
+  async function callSingleAI(participantIdx) {
+    const room = state.room;
+    if (!room) return '';
+    const p = room.participants[participantIdx];
+    if (!p) return '';
+    const color = COLORS[participantIdx % COLORS.length];
+    setThinking(p.name);
+
+    const msgs = [{ role: 'system', content: p.prompt }];
+    for (const m of room.messages) {
+      msgs.push({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content });
+    }
+
+    const { bubble } = addMessageDOM('ai', p.name, '', color);
+    let fullContent = '';
+    try {
+      const ac = new AbortController();
+      state._aborters.push(ac);
+
+      fullContent = await streamAI(p, msgs, ac.signal);
+      if (!fullContent) fullContent = '（无响应）';
+      updateBubble(bubble, fullContent, true);
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        fullContent = '';
+      } else {
+        fullContent = '❌ ' + e.message;
+      }
+      bubble.textContent = fullContent;
+    }
+
+    setThinking(null);
+    if (fullContent) {
+      room.messages.push({ role: 'ai', name: p.name, content: fullContent, timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) });
+      saveRoom(room);
+    }
+    return fullContent;
+  }
+
+  async function startDiscussion() {
+    const room = state.room;
+    if (!room || state.isDiscussing) return;
+    if (room.participants.length === 0) { showToast('没有 AI 参与者', 'warning'); return; }
+    if (room.messages.length === 0) { showToast('请先发送一条消息', 'warning'); return; }
+    const hasKey = room.participants.some(p => getApiKey(p.provider));
+    if (!hasKey) { showToast('请先设置 API Key（在 4.0.1 工作台中配置）', 'error'); return; }
+
+    state.isDiscussing = true;
+    state.discussStopped = false;
+    state.currentRound = 0;
+    document.getElementById('sendMsgBtn').disabled = true;
+    document.getElementById('startDiscussBtn').disabled = true;
+    document.getElementById('stopDiscussBtn').style.display = 'inline-flex';
+
+    const totalRounds = room.rounds;
+    for (let r = 0; r < totalRounds; r++) {
+      if (state.discussStopped) break;
+      state.currentRound = r + 1;
+      document.getElementById('roundCounter').textContent = '讨论: ' + (r + 1) + '/' + totalRounds;
+      for (let aiIdx = 0; aiIdx < room.participants.length; aiIdx++) {
+        if (state.discussStopped) break;
+        await callSingleAI(aiIdx);
+        if (state.discussStopped) break;
+      }
+    }
+    finishDiscussion();
+  }
+
+  function finishDiscussion() {
+    state.isDiscussing = false;
+    document.getElementById('sendMsgBtn').disabled = false;
+    document.getElementById('startDiscussBtn').disabled = false;
+    document.getElementById('stopDiscussBtn').style.display = 'none';
+    setThinking(null);
+    if (!state.discussStopped) {
+      showToast('✅ 讨论完成', 'success');
+    } else {
+      showToast('⏹️ 讨论已停止', 'info');
+    }
+    document.getElementById('roundCounter').textContent = '';
+  }
+
+  function updateHistory() {
+    const rooms = listRooms();
+    const section = document.getElementById('historySection');
+    const list = document.getElementById('historyList');
+    if (rooms.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = 'block';
+    list.innerHTML = '';
+    rooms.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      item.dataset.roomId = r.id;
+      const isCurrent = state.room && state.room.id === r.id;
+      if (isCurrent) item.style.background = 'var(--accent-blue-light)';
+      item.innerHTML = `
+        <span class="h-name">${esc(r.name)}</span>
+        <span class="h-date">${r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('zh-CN') : ''}</span>
+        <span class="h-del">✕</span>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  // Sidebar event delegation (elements get recreated by renderSidebar)
+  document.getElementById('sidebar').addEventListener('click', function(e) {
+    const t = e.target;
+    if (t.id === 'sidebarToggle') { state.sidebarOpen = !state.sidebarOpen; updateSidebarState(); return; }
+    if (t.id === 'themeBtn') { state.darkMode = !state.darkMode; applyTheme(); return; }
+    if (t.id === 'newRoomBtn') { if (state.isDiscussing) { showToast('请先停止讨论','warning'); return; } newRoom(); return; }
+    if (t.id === 'addAiBtn') {
+      if (!state.room) { showToast('请先创建房间','warning'); return; }
+      state.room.participants.push(normalizeParticipant({name:'新 AI',prompt:'你是一个有用的AI助手。',provider:'deepseek',model:'deepseek-chat',temp:0.7}));
+      renderSidebar(); saveRoom(state.room); return;
+    }
+    const del = t.closest('.h-del'); if (del) {
+      const item = del.closest('.history-item'); if (!item) return;
+      const roomId = item.dataset.roomId;
+      const nameEl = item.querySelector('.h-name');
+      const roomName = nameEl ? nameEl.textContent : '';
+      showConfirm('确定删除房间「'+roomName+'」吗？', function() {
+        if (state.room && state.room.id === roomId) {
+          const rooms = listRooms();
+          if (rooms.length <= 1) { showToast('至少保留一个房间','warning'); return; }
+          deleteRoom(roomId);
+          const remaining = listRooms();
+          if (remaining.length > 0) loadRoomById(remaining[0].id); else newRoom();
+          showToast('已删除: '+roomName,'info');
+        } else { deleteRoom(roomId); updateHistory(); showToast('已删除: '+roomName,'info'); }
+      });
+      return;
+    }
+    const hist = t.closest('.history-item'); if (hist) { loadRoomById(hist.dataset.roomId); }
+  });
+  document.getElementById('sidebar').addEventListener('input', function(e) {
+    if (e.target.id === 'roomNameInput' && state.room) {
+      state.room.name = e.target.value.trim() || 'AI 聊天室'; updateHeader(); saveRoom(state.room); updateHistory();
+    }
+  });
+  document.getElementById('sidebar').addEventListener('change', function(e) {
+    if (e.target.id === 'roundsSelect' && state.room) { state.room.rounds = parseInt(e.target.value); updateHeader(); saveRoom(state.room); }
+    if (e.target.id === 'autoStartCheck' && state.room) { state.room.autoStart = e.target.checked; saveRoom(state.room); }
+  });
+
+  // Sidebar toggle is OUTSIDE sidebar, needs direct listener
+  document.getElementById('sidebarToggle').addEventListener('click', function() {
+    state.sidebarOpen = !state.sidebarOpen; updateSidebarState();
+  });
+
+  // Non-sidebar listeners (elements never recreated)
+  document.getElementById('clearChatBtn').addEventListener('click', () => {
+    if (!state.room) return;
+    if (state.isDiscussing) { showToast('请先停止讨论','warning'); return; }
+    state.room.messages = []; renderMessages(); saveRoom(state.room); showToast('已清空聊天','info');
+  });
+  document.getElementById('sendMsgBtn').addEventListener('click', async () => {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text || !state.room) return;
+    input.value = ''; input.style.height = 'auto';
+    state.room.messages.push({role:'user',name:'你',content:text,timestamp:new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})});
+    addMessageDOM('user',null,text); saveRoom(state.room);
+    if (state.room.autoStart) await startDiscussion();
+  });
+  document.getElementById('startDiscussBtn').addEventListener('click', async () => {
+    if (!state.room||state.room.messages.length===0) { showToast('请先发送一条消息','warning'); return; }
+    await startDiscussion();
+  });
+  document.getElementById('stopDiscussBtn').addEventListener('click', () => {
+    state.discussStopped = true;
+    state._aborters.forEach(ac=>{try{ac.abort()}catch(e){}});
+    state._aborters = [];
+  });
+  document.getElementById('chatInput').addEventListener('keydown', (e) => {
+    if (e.isComposing||e.keyCode===229) return;
+    if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); document.getElementById('sendMsgBtn').click(); }
+  });
+  document.getElementById('chatInput').addEventListener('input', function() {
+    this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,100)+'px';
+  });
+
+  function init() {
+    applyTheme();
+    updateSidebarState();
+    const rooms = listRooms();
+    if (rooms.length > 0) {
+      loadRoomById(rooms[0].id);
+    } else {
+      newRoom();
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
