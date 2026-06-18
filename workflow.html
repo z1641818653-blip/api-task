@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow</title>
+<style>
+:root {
+  --bg: #f5f0ff;
+  --surface: #ffffff;
+  --surface2: #f0ebf8;
+  --text: #2d1b4e;
+  --text2: #6b5b8a;
+  --border: #d4c8e8;
+  --primary: #6d3fc0;
+  --primary-hover: #5a2fa8;
+  --shadow: 0 2px 8px rgba(109,63,192,0.08);
+  --radius: 10px;
+  --radius-sm: 8px;
+  --transition: 0.2s ease;
+  --success: #2ecc71;
+  --danger: #e74c3c;
+  --warning: #f39c12;
+  --info: #3498db;
+}
+[data-theme="dark"] {
+  --bg: #1a1428;
+  --surface: #241e38;
+  --surface2: #2d2548;
+  --text: #e0d8f0;
+  --text2: #a898c8;
+  --border: #3a2d58;
+  --primary: #8b6fd8;
+  --primary-hover: #9d82e8;
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Inter','SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif;
+  background:var(--bg);color:var(--text);height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased
+}
+.layout{display:flex;height:100vh;position:relative}
+
+/* LEFT PANEL */
+.panel-left{
+  width:260px;min-width:260px;background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  transition:width .3s ease,min-width .3s ease,opacity .3s ease,padding .3s ease;
+  overflow:hidden;position:relative;z-index:10
+}
+.panel-left.collapsed{padding:0;opacity:0;border:none;overflow:hidden}
+.panel-left .header{
+  padding:16px 18px 12px;font-size:13px;font-weight:700;color:var(--text);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px
+}
+.panel-left .body{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+
+/* CENTER */
+.panel-center{
+  flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;
+  background:var(--bg);position:relative;z-index:5
+}
+.panel-center .top-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 20px;background:var(--surface);
+  border-bottom:1px solid var(--border);flex-shrink:0;gap:12px;min-height:42px
+}
+.panel-center .top-bar h2{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap}
+.panel-center .top-bar .title-display{font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:right}
+.menu-btn{background:transparent;border:none;color:var(--text2);font-size:16px;cursor:pointer;padding:3px 6px;border-radius:6px;line-height:1;transition:background .15s,color .15s;flex-shrink:0}
+.menu-btn:hover{background:var(--surface2);color:var(--primary)}
+.menu-dropdown{position:absolute;top:100%;left:8px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 16px rgba(0,0,0,.12);padding:4px;display:none;min-width:160px}
+.menu-dropdown.show{display:block}
+.menu-dropdown a{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;font-size:13px;color:var(--text);text-decoration:none;transition:background .15s}
+.menu-dropdown a:hover{background:var(--surface2);color:var(--primary)}
+.menu-dropdown .menu-label{font-size:10px;color:var(--text2);padding:4px 12px 2px;font-weight:600}
+.panel-center .content{
+  flex:1;overflow-y:auto;padding:16px 20px;min-height:0;
+  display:flex;flex-direction:column;gap:10px
+}
+.panel-center .bottom-bar{
+  padding:8px 20px;background:var(--surface);
+  border-top:1px solid var(--border);flex-shrink:0;font-size:11px;color:var(--text2)
+}
+
+/* RIGHT PANEL */
+.panel-right{
+  width:300px;min-width:300px;background:var(--surface);
+  border-left:1px solid var(--border);display:flex;flex-direction:column;
+  transition:width .3s ease,min-width .3s ease,opacity .3s ease,padding .3s ease;
+  overflow:hidden;position:relative;z-index:10
+}
+.panel-right.collapsed{padding:0;opacity:0;border:none;overflow:hidden}
+.panel-right .header{
+  padding:16px 18px 12px;font-size:13px;font-weight:700;color:var(--text);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px
+}
+.panel-right .body{flex:1;overflow-x:auto;overflow-y:auto;padding:12px 8px;min-height:0;display:flex;flex-direction:column;align-items:center}
+
+/* RESIZE HANDLE */
+.resize-handle{
+  position:absolute;top:0;bottom:0;left:-4px;width:8px;
+  cursor:col-resize;z-index:50;background:transparent;transition:background .15s
+}
+.resize-handle:hover,.resize-handle.active{background:var(--primary);opacity:.2}
+.panel-right.dragging{user-select:none;pointer-events:none;transition:none!important}
+
+/* FLOATING COLLAPSE BUTTON */
+.floating-btn{
+  position:absolute;top:50%;z-index:100;width:20px;height:40px;
+  transform:translateY(-50%);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border:1px solid var(--border);background:var(--surface);
+  color:var(--text2);font-size:9px;box-shadow:0 2px 8px rgba(0,0,0,.1);
+  transition:background .15s;
+}
+.floating-btn:hover{background:var(--surface2);color:var(--primary)}
+#collapseBtnLeft{left:260px;border-radius:0 6px 6px 0;border-left:none}
+#collapseBtnRight{right:300px;border-radius:6px 0 0 6px;border-right:none}
+
+/* THEME TOGGLE */
+.theme-toggle{
+  margin-top:auto;padding:10px 14px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;flex-shrink:0
+}
+.theme-toggle:hover{color:var(--primary)}
+
+/* FORM ELEMENTS */
+.form-group{margin-bottom:10px}
+.form-label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;letter-spacing:.02em}
+.form-input,.form-select,.form-textarea{
+  width:100%;padding:7px 10px;font-size:12px;font-family:inherit;color:var(--text);
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+  outline:none;transition:border-color var(--transition)
+}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--primary)}
+.form-textarea{resize:vertical;min-height:48px;line-height:1.5}
+.form-textarea.mono{font-family:'SF Mono','Menlo','Consolas',monospace;font-size:11px}
+.form-input.number{width:80px}
+.form-row{display:flex;gap:10px;align-items:center}
+.form-row>*{flex:1}
+
+/* BUTTONS */
+.btn{
+  display:inline-flex;align-items:center;gap:4px;padding:6px 14px;font-size:12px;font-weight:600;
+  border-radius:var(--radius-sm);border:1px solid var(--border);cursor:pointer;
+  background:var(--surface);color:var(--text);font-family:inherit;transition:all var(--transition);
+  white-space:nowrap
+}
+.btn:hover{background:var(--surface2);border-color:var(--primary);color:var(--primary)}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn-primary:hover{background:var(--primary-hover);color:#fff}
+.btn-danger{color:var(--danger);border-color:var(--danger)}
+.btn-danger:hover{background:var(--danger);color:#fff}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-group{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* COLOR PICKER */
+.color-picker{display:flex;gap:4px;flex-wrap:wrap}
+.color-btn{
+  width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+  cursor:pointer;transition:all var(--transition);position:relative;flex-shrink:0
+}
+.color-btn:hover{transform:scale(1.15)}
+.color-btn.active{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary)}
+.color-btn.none{background:var(--surface2);border-style:dashed}
+.color-btn.red{background:#e74c3c}
+.color-btn.orange{background:#e67e22}
+.color-btn.yellow{background:#f1c40f}
+.color-btn.green{background:#2ecc71}
+.color-btn.blue{background:#3498db}
+.color-btn.purple{background:#9b59b6}
+
+/* STATUS BADGE */
+.status-badge{
+  display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 10px;
+  border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--text2)
+}
+.status-badge.pending{color:var(--text2)}
+.status-badge.running{color:var(--info);border-color:var(--info)}
+.status-badge.done{color:var(--success);border-color:var(--success)}
+.status-badge.error{color:var(--danger);border-color:var(--danger)}
+
+/* ERROR MESSAGE */
+.error-msg{
+  font-size:11px;color:var(--danger);padding:6px 10px;background:rgba(231,76,60,.08);
+  border:1px solid rgba(231,76,60,.2);border-radius:var(--radius-sm);display:none
+}
+.error-msg.show{display:block}
+
+/* TREE */
+.tree{text-align:center;padding:10px 0;display:inline-block;min-width:100%}
+.tree ul{display:flex;padding-top:20px;position:relative;justify-content:center;list-style:none;margin:0;padding-left:0}
+.tree li{display:flex;flex-direction:column;align-items:center;position:relative;padding:0 4px;flex:0 0 auto}
+.tree li::before{content:'';position:absolute;top:-20px;left:50%;width:0;height:20px;border-left:2px solid var(--border)}
+.tree ul::before{content:'';position:absolute;top:0;left:5%;width:90%;height:0;border-top:2px solid var(--border)}
+.tree>ul{padding-top:0}
+.tree>ul::before{display:none}
+.tree>ul>li::before{display:none}
+.t-node{background:var(--surface);border:2px solid var(--border);border-radius:8px;padding:2px 6px;cursor:pointer;text-align:center;min-width:40px;max-width:90px;transition:all .15s;position:relative;display:flex;align-items:center;gap:2px;font-size:10px;flex-shrink:0}
+.t-node:hover{border-color:var(--primary)}
+.t-node.selected{border-color:var(--primary);background:rgba(109,63,192,0.06)}
+.t-node.color-red{border-left:4px solid #ef4444}
+.t-node.color-orange{border-left:4px solid #f97316}
+.t-node.color-yellow{border-left:4px solid #eab308}
+.t-node.color-green{border-left:4px solid #22c55e}
+.t-node.color-blue{border-left:4px solid #3b82f6}
+.t-node.color-purple{border-left:4px solid #8b5cf6}
+.node-drag{font-size:10px;opacity:.4;cursor:grab;user-select:none;line-height:1}
+.node-drag:hover{opacity:1}
+.node-num{font-size:9px;font-weight:700;color:var(--primary);white-space:nowrap}
+.node-title{font-size:10px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50px;display:inline-block}
+.node-status{position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%}
+.node-status.pending{background:#9ca3af}
+.node-status.running{background:#f59e0b;animation:pulse .8s infinite}
+.node-status.done{background:#10b981}
+.node-status.failed{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.t-node.locked{opacity:.7;background:var(--surface2)}
+.t-node.locked .node-drag{opacity:.2;cursor:default}
+
+/* TREE BUTTONS */
+.tree-buttons{
+  padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap;
+  background:var(--surface);flex-shrink:0
+}
+.tree-buttons .btn{flex:1;min-width:0;justify-content:center;padding:5px 6px;font-size:11px}
+
+/* TOAST */
+.toast-container{
+  position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none
+}
+.toast{
+  pointer-events:auto;padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;
+  box-shadow:0 4px 12px rgba(0,0,0,.12);color:#fff;animation:slideIn .25s ease;max-width:300px;
+  transition:opacity .25s,transform .25s
+}
+.toast.info{background:var(--info)}
+.toast.success{background:var(--success)}
+.toast.error{background:var(--danger)}
+.toast.warning{background:var(--warning)}
+.toast.removing{opacity:0;transform:translateX(20px)}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* CONTEXT MENU */
+.context-menu{
+  position:fixed;z-index:9998;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);box-shadow:0 4px 16px rgba(0,0,0,.12);display:none;min-width:120px;
+  overflow:hidden
+}
+.context-menu .ctx-item{
+  padding:8px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;
+  color:var(--text);transition:background var(--transition)
+}
+.context-menu .ctx-item:hover{background:var(--surface2);color:var(--primary)}
+.context-menu .ctx-divider{height:1px;background:var(--border);margin:2px 0}
+
+/* PLACEHOLDER */
+.placeholder{color:var(--text2);font-size:13px;text-align:center;opacity:.6;padding:40px 20px}
+
+/* MISC */
+.flex-center{display:flex;align-items:center;justify-content:center}
+.gap-sm{gap:6px}
+.text-muted{color:var(--text2)}
+.text-sm{font-size:11px}
+.mt-auto{margin-top:auto}
+.w-full{width:100%}
+
+/* OUTPUT TEXTAREA */
+.output-area{flex:1;min-height:0;display:flex;flex-direction:column}
+.output-area .form-textarea{flex:1;min-height:60px;resize:none}
+</style>
+</head>
+<body>
+<div class="layout" id="layout">
+
+  <!-- LEFT -->
+  <aside class="panel-left" id="panelLeft">
+    <div class="header" style="cursor:pointer;user-select:none" id="navHeader">🧭 AI 工具 <span style="margin-left:auto;font-size:10px;color:var(--text2)" id="navArrow">▼</span></div>
+    <div class="body" id="navBody" style="padding:8px 14px 4px">
+      <a href="index.html" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;font-size:12px;color:var(--text);text-decoration:none;transition:background .15s">📋 AI 工作台</a>
+      <a href="chatroom.html" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;font-size:12px;color:var(--text);text-decoration:none;transition:background .15s">💬 AI 聊天室</a>
+      <a href="workflow.html" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">🌳 AI 流程树</a>
+    </div>
+    <div class="header">⚙️ 设置</div>
+    <div class="body" id="settingsBody"></div>
+    <div class="theme-toggle" id="themeToggle">🌙 暗色模式</div>
+  </aside>
+  <button class="floating-btn" id="collapseBtnLeft" title="切换左侧栏">◀</button>
+
+  <!-- CENTER -->
+  <main class="panel-center">
+    <div class="top-bar" id="topBar">
+      <h2 id="nodePath">📌 节点</h2>
+      <span class="title-display" id="nodeTitleDisplay"></span>
+    </div>
+    <div class="content" id="workspaceContent"></div>
+    <div class="bottom-bar" id="bottomBar"></div>
+  </main>
+
+  <button class="floating-btn" id="collapseBtnRight" title="切换右侧栏">▶</button>
+
+  <!-- RIGHT -->
+  <aside class="panel-right" id="panelRight">
+    <div class="resize-handle" id="resizeHandle"></div>
+    <div class="header">🌳 流程控制</div>
+    <div class="body" id="treeBody"><ul class="tree" id="treeContainer"></ul></div>
+    <div class="tree-buttons" id="treeButtons">
+      <button class="btn btn-sm" data-action="addChild">➕ 添加子节点</button>
+      <button class="btn btn-sm btn-danger" data-action="deleteNode">✕ 删除</button>
+      <button class="btn btn-sm" data-action="copyNode">📋 复制</button>
+      <button class="btn btn-sm" data-action="pasteNode">📥 粘贴</button>
+    </div>
+  </aside>
+
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<div class="context-menu" id="contextMenu"></div>
+
+<script>
+// ── State ──
+let treeData = null;
+let selectedNodeId = null;
+let copiedNode = null;
+let abortController = null;
+let isRunning = false;
+let runQueue = [];
+let runIndex = 0;
+let providerState = { provider: 'DeepSeek', model: '', apiKey: '' };
+
+function createNode(title, opts) {
+  return {
+    id: 'n' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    title: title || '',
+    prompt: '',
+    inputType: 'manual',
+    inheritFrom: null,
+    manualInput: '',
+    output: '',
+    status: 'pending',
+    error: '',
+    maxTokens: 4000,
+    temperature: 0.3,
+    color: '',
+    children: [],
+    _parentId: null,
+    _collapsed: false,
+    locked: false,
+    ...opts
+  };
+}
+
+// ── Tree operations ──
+function findNode(root, id) {
+  if (!root) return null;
+  if (root.id === id) return root;
+  for (const c of root.children) {
+    const found = findNode(c, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findParent(root, id, parent) {
+  if (!root) return null;
+  if (root.id === id) return parent;
+  for (const c of root.children) {
+    const found = findParent(c, id, root);
+    if (found) return found;
+  }
+  return null;
+}
+
+function getAncestors(root, id, acc) {
+  acc = acc || [];
+  if (!root) return acc;
+  if (root.id === id) return acc;
+  for (const c of root.children) {
+    if (findNode(c, id)) {
+      acc.push(root);
+      return getAncestors(c, id, acc);
+    }
+  }
+  return acc;
+}
+
+function getPathIdx(root, id) {
+  const path = [];
+  (function walk(node, indices) {
+    if (node.id === id) { path.push(...indices); return true; }
+    for (let i = 0; i < node.children.length; i++) {
+      if (walk(node.children[i], [...indices, i])) return true;
+    }
+    return false;
+  })(root, []);
+  return path;
+}
+
+function getNodePath(root, id) {
+  const idx = getPathIdx(root, id);
+  return idx.map(i => i + 1).join('.');
+}
+
+function updateParentRefs(node, parentId) {
+  node._parentId = parentId;
+  for (const c of node.children) updateParentRefs(c, node.id);
+}
+
+function addChild(parentId, title) {
+  const parent = findNode(treeData, parentId);
+  if (!parent) return null;
+  const node = createNode(title || '新节点');
+  node._parentId = parentId;
+  parent.children.push(node);
+  saveState();
+  renderAll();
+  return node.id;
+}
+
+function deleteNode(nodeId) {
+  const parent = findParent(treeData, nodeId);
+  if (!parent) return;
+  const idx = parent.children.findIndex(c => c.id === nodeId);
+  if (idx !== -1) parent.children.splice(idx, 1);
+  if (selectedNodeId === nodeId) selectedNodeId = treeData.children.length ? treeData.children[0].id : null;
+  saveState();
+  renderAll();
+}
+
+function removeNodeFromParent(root, nodeId) {
+  if (!root) return null;
+  for (let i = 0; i < root.children.length; i++) {
+    if (root.children[i].id === nodeId) return root.children.splice(i, 1)[0];
+    const found = removeNodeFromParent(root.children[i], nodeId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function moveNodeBefore(nodeId, targetId) {
+  const node = removeNodeFromParent(treeData, nodeId);
+  if (!node) return;
+  const targetParent = findParent(treeData, targetId);
+  if (!targetParent) { treeData.children.push(node); return; }
+  const tIdx = targetParent.children.findIndex(c => c.id === targetId);
+  targetParent.children.splice(tIdx, 0, node);
+  updateParentRefs(node, targetParent.id);
+  saveState();
+  renderAll();
+}
+
+function moveNodeAfter(nodeId, targetId) {
+  const node = removeNodeFromParent(treeData, nodeId);
+  if (!node) return;
+  const targetParent = findParent(treeData, targetId);
+  if (!targetParent) { treeData.children.unshift(node); return; }
+  const tIdx = targetParent.children.findIndex(c => c.id === targetId);
+  targetParent.children.splice(tIdx + 1, 0, node);
+  updateParentRefs(node, targetParent.id);
+  saveState();
+  renderAll();
+}
+
+function moveNodeAsChild(nodeId, targetId) {
+  const node = removeNodeFromParent(treeData, nodeId);
+  if (!node) return;
+  const target = findNode(treeData, targetId);
+  if (!target) { treeData.children.push(node); return; }
+  target.children.push(node);
+  updateParentRefs(node, target.id);
+  saveState();
+  renderAll();
+}
+
+function countDescendants(node) {
+  let count = 1;
+  for (const c of node.children) count += countDescendants(c);
+  return count;
+}
+
+function dfsNodes(node, acc) {
+  acc = acc || [];
+  acc.push(node);
+  for (const c of node.children) dfsNodes(c, acc);
+  return acc;
+}
+
+function copyNode(nodeId) {
+  const node = findNode(treeData, nodeId);
+  if (!node) return;
+  copiedNode = JSON.parse(JSON.stringify(node));
+  // Clear id so it clones fresh
+  delete copiedNode.id;
+  showToast('节点已复制', 'success');
+}
+
+function pasteNode(targetId) {
+  if (!copiedNode) { showToast('没有已复制的节点', 'warning'); return; }
+  const target = findNode(treeData, targetId);
+  if (!target) { showToast('目标节点不存在', 'error'); return; }
+  const newNode = JSON.parse(JSON.stringify(copiedNode));
+  newNode.id = 'n' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  newNode.status = 'pending';
+  newNode.output = '';
+  newNode.error = '';
+  (function clearIds(n) {
+    n._parentId = target.id;
+    for (const c of n.children) clearIds(c);
+  })(newNode);
+  target.children.push(newNode);
+  if (target._collapsed) target._collapsed = false;
+  saveState();
+  renderAll();
+  selectedNodeId = newNode.id;
+  renderAll();
+  showToast('节点已粘贴', 'success');
+}
+
+function toggleNodeLock(id) {
+  var n = findNode(treeData, id);
+  if (!n) return;
+  n.locked = !n.locked;
+  saveState();
+  renderAll();
+}
+
+// ── Provider configs ──
+const PROVIDERS = {
+  DeepSeek: {
+    endpoint: 'https://api.deepseek.com/v1/chat/completions',
+    buildBody: (model, prompt, maxTokens, temperature) => ({
+      model: model || 'deepseek-chat',
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      max_tokens: maxTokens,
+      temperature
+    }),
+    buildHeaders: (apiKey) => ({ 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' }),
+    parse: (data) => data.choices?.[0]?.delta?.content || data.choices?.[0]?.text || ''
+  },
+  OpenAI: {
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    buildBody: (model, prompt, maxTokens, temperature) => ({
+      model: model || 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      max_tokens: maxTokens,
+      temperature
+    }),
+    buildHeaders: (apiKey) => ({ 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' }),
+    parse: (data) => data.choices?.[0]?.delta?.content || data.choices?.[0]?.text || ''
+  },
+  Claude: {
+    endpoint: 'https://api.anthropic.com/v1/messages',
+    buildBody: (model, prompt, maxTokens, temperature) => ({
+      model: model || 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      temperature
+    }),
+    buildHeaders: (apiKey) => ({ 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }),
+    parse: (data) => data.type === 'content_block_delta' ? (data.delta?.text || '') : ''
+  },
+  Gemini: {
+    getUrl: (model, apiKey) => `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:streamGenerateContent?alt=sse&key=${apiKey}`,
+    buildBody: (model, prompt, maxTokens, temperature) => ({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens, temperature }
+    }),
+    buildHeaders: () => ({ 'Content-Type': 'application/json' }),
+    parse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  },
+  '千问': {
+    endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    buildBody: (model, prompt, maxTokens, temperature) => ({
+      model: model || 'qwen-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      max_tokens: maxTokens,
+      temperature
+    }),
+    buildHeaders: (apiKey) => ({ 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' }),
+    parse: (data) => data.choices?.[0]?.delta?.content || data.choices?.[0]?.text || ''
+  }
+};
+
+// ── SSE execution ──
+async function executeNode(nodeId) {
+  if (isRunning) { showToast('正在执行中', 'warning'); return; }
+  const node = findNode(treeData, nodeId);
+  if (!node) return;
+  if (!providerState.apiKey) { showToast('请先设置 API Key', 'warning'); return; }
+
+  isRunning = true;
+  abortController = new AbortController();
+  node.status = 'running';
+  node.output = '';
+  node.error = '';
+  renderAll();
+
+  try {
+    let actualPrompt = node.prompt || '';
+    const inputSource = node.inputType;
+    if (inputSource === 'manual' && node.manualInput) {
+      actualPrompt = node.manualInput + '\n\n' + (node.prompt || '');
+    } else if (inputSource === 'inherit' && node.inheritFrom) {
+      const ancestor = findNode(treeData, node.inheritFrom);
+      if (ancestor && ancestor.output) {
+        actualPrompt = ancestor.output + '\n\n' + (node.prompt || '');
+      }
+    }
+
+    const p = PROVIDERS[providerState.provider];
+    if (!p) throw new Error('不支持的 Provider');
+
+    const model = providerState.model || '';
+    const url = p.getUrl ? p.getUrl(model, providerState.apiKey) : p.endpoint;
+    const headers = p.buildHeaders(providerState.apiKey);
+    const body = p.buildBody(model, actualPrompt || 'Hello', node.maxTokens, node.temperature);
+    const parseFn = p.parse;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: abortController.signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error('HTTP ' + response.status + (errText ? ': ' + errText.slice(0,200) : ''));
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let accumulated = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n');
+      buf = parts.pop() || '';
+      for (const line of parts) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]' || payload === '[done]') continue;
+        try {
+          const parsed = JSON.parse(payload);
+          const text = parseFn(parsed);
+          if (text) {
+            accumulated += text;
+            node.output = accumulated;
+            updateOutputDisplay(nodeId);
+          }
+        } catch(e) { /* skip malformed */ }
+      }
+    }
+
+    node.status = 'done';
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const n = findNode(treeData, nodeId);
+      if (n) n.status = 'done';
+    } else {
+      const n = findNode(treeData, nodeId);
+      if (n) { n.status = 'error'; n.error = err.message; }
+    }
+  } finally {
+    isRunning = false;
+    abortController = null;
+    renderAll();
+  }
+}
+
+async function executeAll(nodeId) {
+  if (isRunning) { showToast('正在执行中', 'warning'); return; }
+  const node = findNode(treeData, nodeId);
+  if (!node) return;
+  if (!providerState.apiKey) { showToast('请先设置 API Key', 'warning'); return; }
+
+  const allNodes = dfsNodes(node);
+  runQueue = allNodes.map(n => n.id);
+  runIndex = 0;
+
+  for (const nid of runQueue) {
+    const n = findNode(treeData, nid);
+    if (!n) continue;
+    n.status = 'pending';
+    n.output = '';
+    n.error = '';
+  }
+  renderAll();
+  updateBottomBar();
+
+  for (let i = 0; i < runQueue.length; i++) {
+    if (abortController?.signal.aborted) break;
+    runIndex = i;
+    const nid = runQueue[i];
+    const n = findNode(treeData, nid);
+    if (!n) continue;
+
+    // Determine prompt based on inheritance chain
+    let actualPrompt = n.prompt || '';
+    const inputSource = n.inputType;
+    if (inputSource === 'manual' && n.manualInput) {
+      actualPrompt = n.manualInput + '\n\n' + (n.prompt || '');
+    } else if (inputSource === 'inherit' && n.inheritFrom) {
+      const ancestor = findNode(treeData, n.inheritFrom);
+      if (ancestor && ancestor.output) {
+        actualPrompt = ancestor.output + '\n\n' + (n.prompt || '');
+      }
+    }
+
+    n.status = 'running';
+    n.output = '';
+    n.error = '';
+    selectedNodeId = nid;
+    renderAll();
+    updateBottomBar();
+
+    try {
+      const p = PROVIDERS[providerState.provider];
+      const model = providerState.model || '';
+      const url = p.getUrl ? p.getUrl(model, providerState.apiKey) : p.endpoint;
+      const headers = p.buildHeaders(providerState.apiKey);
+      const body = p.buildBody(model, actualPrompt || 'Hello', n.maxTokens, n.temperature);
+      const parseFn = p.parse;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error('HTTP ' + response.status + (errText ? ': ' + errText.slice(0,200) : ''));
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let accumulated = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n');
+        buf = parts.pop() || '';
+        for (const line of parts) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]' || payload === '[done]') continue;
+          try {
+            const parsed = JSON.parse(payload);
+            const text = parseFn(parsed);
+            if (text) {
+              accumulated += text;
+              n.output = accumulated;
+              updateOutputDisplay(nid);
+            }
+          } catch(e) {}
+        }
+      }
+
+      n.status = 'done';
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        n.status = 'done';
+      } else {
+        n.status = 'error';
+        n.error = err.message;
+      }
+    }
+    renderAll();
+    updateBottomBar();
+  }
+
+  abortController = null;
+  updateBottomBar();
+}
+
+function stopExecution() {
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+  }
+}
+
+function updateOutputDisplay(nodeId) {
+  if (selectedNodeId !== nodeId) return;
+  const el = document.getElementById('nodeOutput');
+  const node = findNode(treeData, nodeId);
+  if (el && node) el.value = node.output || '';
+}
+
+function updateBottomBar() {
+  const el = document.getElementById('bottomBar');
+  if (runQueue.length && runIndex < runQueue.length) {
+    el.textContent = '⏳ 执行中: ' + (runIndex + 1) + '/' + runQueue.length;
+  } else {
+    runQueue = [];
+    runIndex = 0;
+    el.textContent = '';
+  }
+}
+
+function buildQueue(node){var q=[];function w(n){if(n.status!=='done')q.push(n);n.children.forEach(function(c){w(c)});}w(node);return q}
+
+function updateProgress(current,total,label){
+  var textEl=document.getElementById('execProgressText');
+  var barEl=document.getElementById('execProgressBar');
+  if(!textEl||!barEl)return;
+  if(current>=total&&total>0){
+    textEl.textContent='全部完成 ('+total+'/'+total+')';
+  }else if(label){
+    textEl.textContent='执行中: '+label+' ('+current+'/'+total+')';
+  }else{
+    textEl.textContent='执行中: '+current+'/'+total;
+  }
+  barEl.style.width=(total>0?(current/total*100):0)+'%';
+}
+
+async function runCascade(nodeId){
+  if(isRunning){showToast('正在执行中','warning');return;}
+  var node=findNode(treeData,nodeId);
+  if(!node)return;
+  if(!providerState.apiKey){showToast('请先设置 API Key','warning');return;}
+  isRunning = true;
+  abortController = new AbortController();
+  var queue=buildQueue(node);
+  if(queue.length===0){showToast('没有待执行的节点','info');return;}
+  document.getElementById('execProgress').style.display='block';
+  updateProgress(0,queue.length,'');
+  runQueue=queue.map(function(n){return n.id});
+  runIndex=0;
+  queue.forEach(function(n){n.status='pending';n.output='';n.error='';});
+  renderAll();
+  for(var i=0;i<queue.length;i++){
+    if(abortController&&abortController.signal.aborted)break;
+    runIndex=i;
+    var n=queue[i];
+    var nid=n.id;
+    var actualPrompt=n.prompt||'';
+    if(n.inputType==='manual'&&n.manualInput){
+      actualPrompt=n.manualInput+'\n\n'+(n.prompt||'');
+    }else if(n.inputType==='inherit'&&n.inheritFrom){
+      var ancestor=findNode(treeData,n.inheritFrom);
+      if(ancestor&&ancestor.output)actualPrompt=ancestor.output+'\n\n'+(n.prompt||'');
+    }
+    n.status='running';n.output='';n.error='';
+    selectedNodeId=nid;
+    renderAll();
+    updateProgress(i,queue.length,n.title||'未命名');
+    try{
+      var p=PROVIDERS[providerState.provider];
+      var model=providerState.model||'';
+      var url=p.getUrl?p.getUrl(model,providerState.apiKey):p.endpoint;
+      var headers=p.buildHeaders(providerState.apiKey);
+      var body=p.buildBody(model,actualPrompt||'Hello',n.maxTokens,n.temperature);
+      var parseFn=p.parse;
+      var response=await fetch(url,{method:'POST',headers,body:JSON.stringify(body),signal:abortController.signal});
+      if(!response.ok){
+        var errText=await response.text().catch(function(){return'';});
+        throw new Error('HTTP '+response.status+(errText?': '+errText.slice(0,200):''));
+      }
+      var reader=response.body.getReader();
+      var decoder=new TextDecoder();
+      var buf='',accumulated='';
+      while(true){
+        var r=await reader.read();
+        if(r.done)break;
+        buf+=decoder.decode(r.value,{stream:true});
+        var parts=buf.split('\n');
+        buf=parts.pop()||'';
+        for(var j=0;j<parts.length;j++){
+          var line=parts[j];
+          if(!line.startsWith('data: '))continue;
+          var payload=line.slice(5).trim();
+          if(payload==='[DONE]'||payload==='[done]')continue;
+          try{
+            var parsed=JSON.parse(payload);
+            var text=parseFn(parsed);
+            if(text){accumulated+=text;n.output=accumulated;updateOutputDisplay(nid);}
+          }catch(e){}
+        }
+      }
+      n.status='done';
+    }catch(err){
+      if(err.name==='AbortError'){n.status='done';}else{n.status='error';n.error=err.message;}
+    }
+    renderAll();
+    updateProgress(i+1,queue.length,'');
+  }
+  isRunning = false;
+  abortController=null;
+  updateProgress(queue.length,queue.length,'');
+  setTimeout(function(){var el=document.getElementById('execProgress');if(el)el.style.display='none';},2000);
+  updateBottomBar();
+}
+
+// ── Toast ──
+function showToast(msg, type) {
+  type = type || 'info';
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('removing');
+    setTimeout(() => t.remove(), 260);
+  }, 3000);
+}
+
+// ── Context Menu ──
+function showContextMenu(e, nodeId) {
+  e.preventDefault();
+  const menu = document.getElementById('contextMenu');
+  menu.innerHTML =
+    '<div class="ctx-item" data-action="ctxCopy" data-id="' + nodeId + '">📋 复制节点</div>' +
+    '<div class="ctx-item" data-action="ctxPaste" data-id="' + nodeId + '">📥 粘贴到此处</div>' +
+    '<div class="ctx-divider"></div>' +
+    '<div class="ctx-item" data-action="ctxAdd" data-id="' + nodeId + '">➕ 添加子节点</div>' +
+    '<div class="ctx-item" data-action="ctxDelete" data-id="' + nodeId + '">✕ 删除节点</div>';
+  menu.style.display = 'block';
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 160) + 'px';
+}
+
+document.addEventListener('click', function() {
+  document.getElementById('contextMenu').style.display = 'none';
+});
+
+document.getElementById('contextMenu').addEventListener('click', function(e) {
+  const item = e.target.closest('.ctx-item');
+  if (!item) return;
+  const nodeId = item.dataset.id;
+  const action = item.dataset.action;
+  var ctxNode = findNode(treeData, nodeId);
+  if (action === 'ctxCopy') { copyNode(nodeId); }
+  else if (action === 'ctxPaste') { pasteNode(nodeId); }
+  else if (action === 'ctxAdd') { addChild(nodeId); }
+  else if (action === 'ctxDelete') {
+    if (ctxNode && ctxNode.locked) { showToast('锁定节点不能删除', 'warning'); }
+    else { deleteNode(nodeId); }
+  }
+  this.style.display = 'none';
+});
+
+// ── Render functions ──
+function renderAll() {
+  renderSettings();
+  renderWorkspace();
+  renderTree();
+}
+
+function renderSettings() {
+  const body = document.getElementById('settingsBody');
+  const p = providerState;
+  body.innerHTML =
+    '<div class="form-group">' +
+      '<label class="form-label">Provider</label>' +
+      '<select class="form-select" id="selProvider">' +
+        Object.keys(PROVIDERS).map(k => '<option value="' + k + '"' + (p.provider === k ? ' selected' : '') + '>' + k + '</option>').join('') +
+      '</select>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Model</label>' +
+      '<input class="form-input" id="inpModel" value="' + esc(p.model) + '" placeholder="留空使用默认">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">API Key</label>' +
+      '<input class="form-input" id="inpApiKey" type="password" value="' + esc(p.apiKey) + '">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<div class="btn-group" style="margin-top:4px">' +
+        '<button class="btn btn-sm w-full" id="btnExport">📤 导出流程</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<div class="btn-group">' +
+        '<button class="btn btn-sm w-full" id="btnImport">📥 导入流程</button>' +
+      '</div>' +
+    '</div>' +
+    '<input type="file" id="importInput" accept=".json" style="display:none">';
+
+  document.getElementById('selProvider').addEventListener('change', function() {
+    providerState.provider = this.value;
+    saveState();
+  });
+  document.getElementById('inpModel').addEventListener('change', function() {
+    providerState.model = this.value;
+    saveState();
+  });
+  document.getElementById('inpApiKey').addEventListener('change', function() {
+    providerState.apiKey = this.value;
+    localStorage.setItem('dk30', this.value);
+    saveState();
+  });
+  document.getElementById('btnExport').addEventListener('click', function() {
+    const data = JSON.stringify({ tree: treeData, provider: providerState }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'workflow.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('流程已导出', 'success');
+  });
+  document.getElementById('btnImport').addEventListener('click', function() {
+    document.getElementById('importInput').click();
+  });
+  document.getElementById('importInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.tree) {
+          treeData = data.tree;
+          updateParentRefs(treeData, null);
+          selectedNodeId = treeData.children.length ? treeData.children[0].id : null;
+        }
+        if (data.provider) Object.assign(providerState, data.provider);
+        saveState();
+        renderAll();
+        showToast('流程已导入', 'success');
+      } catch(err) {
+        showToast('导入失败: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+    this.value = '';
+  });
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return esc(s); }
+
+function renderWorkspace() {
+  const content = document.getElementById('workspaceContent');
+  const pathEl = document.getElementById('nodePath');
+  const titleEl = document.getElementById('nodeTitleDisplay');
+  const node = selectedNodeId ? findNode(treeData, selectedNodeId) : null;
+
+  if (!node) {
+    content.innerHTML = '<div class="placeholder">请选择一个节点</div>';
+    pathEl.textContent = '📌 节点';
+    titleEl.textContent = '';
+    return;
+  }
+
+  const path = getNodePath(treeData, node.id);
+  pathEl.textContent = '📌 节点 ' + path;
+  titleEl.textContent = node.title || '(未命名)';
+
+  // Build inherit dropdown
+  const ancestors = getAncestors(treeData, node.id);
+  let inheritOpts = '<option value="">— 选择上级 —</option>';
+  for (const a of ancestors) {
+    const ap = getNodePath(treeData, a.id);
+    inheritOpts += '<option value="' + a.id + '"' + (node.inheritFrom === a.id ? ' selected' : '') + '>' + ap + ' ' + esc(a.title || '未命名') + '</option>';
+  }
+
+  // Color picker
+  const colorList = ['','red','orange','yellow','green','blue','purple'];
+  const colorLabels = { '':'无', 'red':'红', 'orange':'橙', 'yellow':'黄', 'green':'绿', 'blue':'蓝', 'purple':'紫' };
+  let colorHtml = '<div class="color-picker">';
+  for (const c of colorList) {
+    colorHtml += '<div class="color-btn ' + (c || 'none') + (node.color === c ? ' active' : '') + '" data-color="' + c + '" title="' + colorLabels[c] + '"></div>';
+  }
+  colorHtml += '</div>';
+
+  const isRunningNode = node.status === 'running';
+  const stopDisabled = !isRunningNode;
+  const statusClass = node.status || 'pending';
+  const execMode = localStorage.getItem('wf_execMode') || 'single';
+  const locked = node.locked;
+  const dis = locked ? ' disabled' : '';
+
+  content.innerHTML =
+    (locked ? '<div class="form-group"><span class="status-badge">🔒 已锁定</span></div>' : '') +
+    '<div class="form-group">' +
+      '<label class="form-label">标题</label>' +
+      '<input class="form-input" id="inpTitle" value="' + esc(node.title) + '"' + dis + '>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">输入来源</label>' +
+      '<select class="form-select" id="selInputType"' + dis + '>' +
+        '<option value="manual"' + (node.inputType === 'manual' ? ' selected' : '') + '>手动输入</option>' +
+        '<option value="inherit"' + (node.inputType === 'inherit' ? ' selected' : '') + '>继承上级</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="form-group" id="inputSourceGroup" style="' + (node.inputType === 'manual' ? '' : 'display:none') + '">' +
+      '<label class="form-label">手动输入</label>' +
+      '<textarea class="form-textarea" id="inpManualInput" rows="2" placeholder="输入内容将前置到 prompt"' + dis + '>' + esc(node.manualInput) + '</textarea>' +
+    '</div>' +
+    '<div class="form-group" id="inheritGroup" style="' + (node.inputType === 'inherit' ? '' : 'display:none') + '">' +
+      '<label class="form-label">继承自</label>' +
+      '<select class="form-select" id="selInheritFrom"' + dis + '>' + inheritOpts + '</select>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label class="form-label">Prompt</label>' +
+      '<textarea class="form-textarea mono" id="inpPrompt" rows="3" style="font-size:11px"' + dis + '>' + esc(node.prompt) + '</textarea>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group" style="flex:0 0 auto">' +
+        '<label class="form-label">Max Tokens</label>' +
+        '<input class="form-input number" id="inpMaxTokens" type="number" value="' + node.maxTokens + '" min="1" max="32000"' + dis + '>' +
+      '</div>' +
+      '<div class="form-group" style="flex:0 0 auto">' +
+        '<label class="form-label">Temperature</label>' +
+        '<input class="form-input number" id="inpTemperature" type="number" value="' + node.temperature + '" min="0" max="2" step="0.1"' + dis + '>' +
+      '</div>' +
+      '<div class="form-group" style="flex:1;min-width:0">' +
+        '<label class="form-label">颜色标签</label>' +
+        colorHtml +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
+      '<label style="font-size:11px;color:var(--text2)">模式:</label>' +
+      '<select id="execMode" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);outline:none"' + dis + '>' +
+        '<option value="single"' + (execMode==='single'?' selected':'') + '>仅当前</option>' +
+        '<option value="cascade"' + (execMode==='cascade'?' selected':'') + '>级联（含子节点）</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<div class="btn-group">' +
+        '<button class="btn btn-primary btn-sm" id="btnExecute">▶ 执行</button>' +
+        '<button class="btn btn-sm" id="btnExecuteAll">▶ 全部执行</button>' +
+        '<button class="btn btn-sm" id="btnStop" ' + (stopDisabled ? 'disabled style="opacity:.4"' : '') + '>⏹ 停止</button>' +
+        '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
+        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')">' + (locked ? '🔒 已锁定' : '🔓 锁定') + '</button>' +
+      '</div>' +
+    '</div>' +
+    '<div id="execProgress" style="display:none;margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text)" id="execProgressText">准备中...</div>' +
+      '<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+        '<div id="execProgressBar" style="height:100%;width:0%;background:var(--primary);transition:width .3s"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<div class="error-msg' + (node.error ? ' show' : '') + '" id="errorMsg">' + esc(node.error || '') + '</div>' +
+    '</div>' +
+    '<div class="output-area" style="flex:1;min-height:60px;display:flex;flex-direction:column">' +
+      '<label class="form-label">输出</label>' +
+      '<textarea class="form-textarea mono" id="nodeOutput" readonly rows="6" style="flex:1;resize:none;font-size:11px">' + esc(node.output || '') + '</textarea>' +
+    '</div>';
+
+  // Wire events
+  document.getElementById('inpTitle').addEventListener('change', function() {
+    node.title = this.value;
+    titleEl.textContent = this.value || '(未命名)';
+    saveState();
+    renderTree();
+  });
+  document.getElementById('selInputType').addEventListener('change', function() {
+    node.inputType = this.value;
+    const manualGroup = document.getElementById('inputSourceGroup');
+    const inheritGroup = document.getElementById('inheritGroup');
+    manualGroup.style.display = this.value === 'manual' ? '' : 'none';
+    inheritGroup.style.display = this.value === 'inherit' ? '' : 'none';
+    saveState();
+  });
+  document.getElementById('inpManualInput').addEventListener('change', function() {
+    node.manualInput = this.value;
+    saveState();
+  });
+  document.getElementById('selInheritFrom').addEventListener('change', function() {
+    node.inheritFrom = this.value || null;
+    saveState();
+  });
+  document.getElementById('inpPrompt').addEventListener('change', function() {
+    node.prompt = this.value;
+    saveState();
+  });
+  document.getElementById('inpMaxTokens').addEventListener('change', function() {
+    node.maxTokens = parseInt(this.value) || 4000;
+    saveState();
+  });
+  document.getElementById('inpTemperature').addEventListener('change', function() {
+    node.temperature = parseFloat(this.value) || 0.3;
+    saveState();
+  });
+  document.querySelectorAll('.color-btn').forEach(function(el) {
+    el.addEventListener('click', function() {
+      node.color = this.dataset.color;
+      document.querySelectorAll('.color-btn').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      saveState();
+      renderTree();
+    });
+  });
+  document.getElementById('execMode').addEventListener('change', function() {
+    localStorage.setItem('wf_execMode', this.value);
+  });
+  document.getElementById('btnExecute').addEventListener('click', function() {
+    saveCurrentNodeEdit();
+    if (!selectedNodeId) return;
+    if (document.getElementById('execMode').value === 'cascade') {
+      runCascade(selectedNodeId);
+    } else {
+      executeNode(selectedNodeId);
+    }
+  });
+  document.getElementById('btnExecuteAll').addEventListener('click', function() {
+    saveCurrentNodeEdit();
+    if (selectedNodeId) executeAll(selectedNodeId);
+  });
+  document.getElementById('btnStop').addEventListener('click', function() { stopExecution(); });
+}
+
+function getStatusText(status) {
+  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', error: '❌ 错误' };
+  return m[status] || '⏳ 待执行';
+}
+
+function saveCurrentNodeEdit() {
+  const node = selectedNodeId ? findNode(treeData, selectedNodeId) : null;
+  if (!node) return;
+  const inp = document.getElementById('inpTitle');
+  if (inp) node.title = inp.value;
+  const sel = document.getElementById('selInputType');
+  if (sel) node.inputType = sel.value;
+  const mi = document.getElementById('inpManualInput');
+  if (mi) node.manualInput = mi.value;
+  const si = document.getElementById('selInheritFrom');
+  if (si) node.inheritFrom = si.value || null;
+  const pr = document.getElementById('inpPrompt');
+  if (pr) node.prompt = pr.value;
+  const mt = document.getElementById('inpMaxTokens');
+  if (mt) node.maxTokens = parseInt(mt.value) || 4000;
+  const tp = document.getElementById('inpTemperature');
+  if (tp) node.temperature = parseFloat(tp.value) || 0.3;
+  saveState();
+}
+
+function renderTree() {
+  const container = document.getElementById('treeContainer');
+  if (!treeData) { container.innerHTML = '<div style="color:var(--text2);padding:20px;font-size:12px">暂无数据</div>'; return; }
+  container.innerHTML = '<div class="tree"><ul>' + renderNode(treeData, 0) + '</ul></div>';
+}
+
+function renderNode(node, depth) {
+  let path = getNodePath(treeData, node.id);
+  let sel = node.id === selectedNodeId ? ' selected' : '';
+  let col = node.color ? ' color-' + node.color : '';
+  let lok = node.locked ? ' locked' : '';
+  let stat = node.status || 'pending';
+  let html = '<li>';
+  html += '<div class="t-node' + sel + col + lok + '" data-id="' + node.id + '">';
+  html += '<span class="node-drag">⠿</span>';
+  html += '<span class="node-num">' + (path ? path + '级' : '') + '</span>';
+  html += '<span class="node-title">' + esc(node.title || '新节点') + '</span>';
+  if(node.locked) html += '<span style="font-size:9px;color:var(--text2)">🔒</span>';
+  html += '<span class="node-status ' + stat + '"></span>';
+  html += '</div>';
+  if (node.children && node.children.length > 0) {
+    html += '<ul>';
+    node.children.forEach(function(c) { html += renderNode(c, depth + 1); });
+    html += '</ul>';
+  }
+  html += '</li>';
+  return html;
+}
+
+// ── Tree event delegation ──
+document.getElementById('treeContainer').addEventListener('click', function(e) {
+  var card = e.target.closest('.t-node');
+  if (!card) return;
+  if (e.target.closest('.node-drag')) return;
+  selectedNodeId = card.dataset.id;
+  renderAll();
+});
+
+document.getElementById('treeContainer').addEventListener('contextmenu', function(e) {
+  var card = e.target.closest('.t-node');
+  if (!card) return;
+  showContextMenu(e, card.dataset.id);
+});
+
+// ── Persistence ──
+function saveState() {
+  try {
+    localStorage.setItem('wf_tree', JSON.stringify(treeData));
+    localStorage.setItem('wf_provider', JSON.stringify(providerState));
+    if (selectedNodeId) localStorage.setItem('wf_selected', selectedNodeId);
+    else localStorage.removeItem('wf_selected');
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const tree = localStorage.getItem('wf_tree');
+    if (tree) {
+      treeData = JSON.parse(tree);
+      updateParentRefs(treeData, null);
+    } else {
+      treeData = createNode('工作流程');
+      const n1 = createNode('分析需求');
+      n1._parentId = treeData.id;
+      n1.prompt = '请仔细分析以下需求并列出关键要点。';
+      const n2 = createNode('设计方案');
+      n2._parentId = treeData.id;
+      n2.prompt = '基于分析结果，设计一个完整的解决方案。';
+      n2.inputType = 'inherit';
+      n2.inheritFrom = n1.id;
+      treeData.children = [n1, n2];
+    }
+
+    const prov = localStorage.getItem('wf_provider');
+    if (prov) Object.assign(providerState, JSON.parse(prov));
+
+    // Load API key from dp49 (base64) or dk30
+    const dp49 = localStorage.getItem('dp49');
+    const dk30 = localStorage.getItem('dk30');
+    if (dp49) {
+      try { providerState.apiKey = atob(dp49); } catch(e) { providerState.apiKey = dk30 || ''; }
+    } else if (dk30) {
+      providerState.apiKey = dk30;
+    }
+
+    selectedNodeId = localStorage.getItem('wf_selected') || null;
+    if (!selectedNodeId && treeData.children.length) {
+      selectedNodeId = treeData.children[0].id;
+    }
+  } catch(e) {
+    treeData = createNode('工作流程');
+    const n1 = createNode('分析需求');
+    n1._parentId = treeData.id;
+    treeData.children = [n1];
+    selectedNodeId = n1.id;
+  }
+}
+
+// ── Theme ──
+document.getElementById('themeToggle').addEventListener('click', function(){
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+  this.textContent = dark ? '🌙 暗色模式' : '☀️ 亮色模式';
+  localStorage.setItem('wf_theme', dark ? 'light' : 'dark');
+});
+
+(function() {
+  const saved = localStorage.getItem('wf_theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('themeToggle').textContent = '☀️ 亮色模式';
+  }
+})();
+
+// ── Collapse ──
+function updateBtnPos(){
+  const pl=document.getElementById('panelLeft'),pr=document.getElementById('panelRight');
+  const bl=document.getElementById('collapseBtnLeft'),br=document.getElementById('collapseBtnRight');
+  bl.style.left=(pl.classList.contains('collapsed')?0:pl.offsetWidth)+'px';
+  br.style.right=(pr.classList.contains('collapsed')?0:pr.offsetWidth)+'px';
+}
+// ── Nav collapse ──
+(function(){
+  var h=document.getElementById('navHeader'),b=document.getElementById('navBody'),a=document.getElementById('navArrow');
+  if(h)h.addEventListener('click',function(){var d=b.style.display==='none';b.style.display=d?'':'none';a.textContent=d?'▼':'▶';});
+})();
+
+var _animFrame=null,_leftW=260,_rightW=380;
+function animateBtnPos(){
+  updateBtnPos();
+  _animFrame=requestAnimationFrame(animateBtnPos);
+}
+function togglePanel(side){
+  const pl=document.getElementById('panelLeft'),pr=document.getElementById('panelRight');
+  const p=side==='left'?pl:pr;
+  const isCollapsed=p.classList.contains('collapsed');
+  if(isCollapsed){
+    p.classList.remove('collapsed');
+    p.style.width=(side==='left'?_leftW:_rightW)+'px';
+    p.style.minWidth=(side==='left'?_leftW:_rightW)+'px';
+  }else{
+    if(side==='left')_leftW=p.offsetWidth;else _rightW=p.offsetWidth;
+    p.style.width='0px';p.style.minWidth='0px';
+    p.classList.add('collapsed');
+  }
+  if(_animFrame)cancelAnimationFrame(_animFrame);
+  animateBtnPos();
+  setTimeout(function(){cancelAnimationFrame(_animFrame);_animFrame=null;updateBtnPos();},360);
+}
+document.getElementById('collapseBtnLeft').addEventListener('click',function(){togglePanel('left')});
+document.getElementById('collapseBtnRight').addEventListener('click',function(){togglePanel('right')});
+
+// ── Resize ──
+(function(){
+  const rh=document.getElementById('resizeHandle'),pr=document.getElementById('panelRight');
+  let d=false,sx=0,sw=0;
+  rh.addEventListener('mousedown',function(e){d=true;sx=e.clientX;sw=pr.offsetWidth;pr.classList.add('dragging');e.preventDefault()});
+  document.addEventListener('mousemove',function(e){
+    if(!d)return;
+    const w=Math.max(180,Math.min(800,sw+sx-e.clientX));
+    pr.style.width=w+'px';pr.style.minWidth=w+'px';
+    _rightW=w;localStorage.setItem('layout_right_w',w);
+    updateBtnPos();
+  });
+  document.addEventListener('mouseup',function(){if(d){d=false;pr.classList.remove('dragging')}});
+})();
+
+// ── Tree buttons ──
+document.querySelectorAll('#treeButtons .btn[data-action]').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    const action = this.dataset.action;
+    if (action === 'addChild') {
+      if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
+      const nid = addChild(selectedNodeId);
+      if (nid) selectedNodeId = nid;
+      renderAll();
+    } else if (action === 'deleteNode') {
+      if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
+      if (selectedNodeId === treeData.id) { showToast('不能删除根节点', 'warning'); return; }
+      var delNode = findNode(treeData, selectedNodeId);
+      if (delNode && delNode.locked) { showToast('锁定节点不能删除', 'warning'); return; }
+      deleteNode(selectedNodeId);
+    } else if (action === 'copyNode') {
+      if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
+      copyNode(selectedNodeId);
+    } else if (action === 'pasteNode') {
+      if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
+      pasteNode(selectedNodeId);
+    }
+  });
+});
+
+// ── Init ──
+_leftW=parseInt(localStorage.getItem('layout_left_w'))||260;
+_rightW=parseInt(localStorage.getItem('layout_right_w'))||380;
+document.getElementById('panelLeft').style.width=_leftW+'px';document.getElementById('panelLeft').style.minWidth=_leftW+'px';
+document.getElementById('panelRight').style.width=_rightW+'px';document.getElementById('panelRight').style.minWidth=_rightW+'px';
+
+loadState();
+updateBtnPos();
+renderAll();
+window.addEventListener('resize',updateBtnPos);
+
+// Handle keyboard copy/paste
+document.addEventListener('keydown', function(e) {
+  var tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    if (selectedNodeId) { copyNode(selectedNodeId); e.preventDefault(); }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+    if (selectedNodeId) { pasteNode(selectedNodeId); e.preventDefault(); }
+  }
+});
+</script>
+</body>
+</html>
