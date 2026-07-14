@@ -848,7 +848,7 @@
 
   const APP_VERSION = '4.0.2';
   let S = { pe:false, ake:false, tke:false, ir:false, lv:true, rv:false, cs:[], cid:null, ap:'', ch:[], ac:null, sr:[], csi:-1, exportId:null, currentProvider:'deepseek', providers:JSON.parse(JSON.stringify(defaultProviders)), ctxLimit:0, maxTokens:8000, editingMsgIdx:null, currentAssistantMsg:null, dm:false, temp:0.7, isNearBottom:true, compareMode:false, compareEntries:[], compareControllers:[], globalSearchActive:false, fontSize:14, regenerating:false };
-  const K = { C:'dc49', P:'dp49', L:'dl49', R:'dr49', ID:'di49', CP:'dcp49', CTX:'dctx49', TOK:'dtok49', VER:'dver49', DM:'ddm49', TEMP:'dtemp49', CM:'dcm49', FS:'dfs49' };
+  const K = { C:'dc0', P:'dp0', L:'dl0', R:'dr0', ID:'di0', CP:'dcp0', CTX:'dctx0', TOK:'dtok0', VER:'dver0', DM:'ddm0', TEMP:'dtemp0', CM:'dcm0', FS:'dfs0' };
 
   function normalizeConv(c) {
     if (!c || typeof c !== 'object') return null;
@@ -880,7 +880,7 @@
   }
   function load() {
     try {
-      const raw = localStorage.getItem(K.C);
+      var raw = localStorage.getItem(K.C);
       if (raw) {
         try {
           var parsed = JSON.parse(raw);
@@ -888,12 +888,10 @@
             S.cs = parsed.map(normalizeConv).filter(Boolean);
           } else if (parsed && parsed.messages) {
             var n = normalizeConv(parsed); S.cs = n ? [n] : [];
-          } else if (parsed && parsed._version && Array.isArray(parsed.conversations)) {
-            S.cs = parsed.conversations.map(normalizeConv).filter(Boolean);
           } else { S.cs = []; }
         } catch(e) { console.warn('load:parse C failed', e.message); S.cs = []; }
       }
-      const p = localStorage.getItem(K.P);
+      var p = localStorage.getItem(K.P);
       if (p) {
         try {
           S.providers = JSON.parse(p);
@@ -902,21 +900,20 @@
           });
         } catch(e) { console.warn('load:parse P failed', e.message); }
       }
-      const cp = localStorage.getItem(K.CP); if (cp && PROVIDERS[cp]) S.currentProvider = cp;
-      const l = localStorage.getItem(K.L); if (l !== null) S.lv = l === 'true';
-      const r = localStorage.getItem(K.R); if (r !== null) S.rv = r === 'true';
-      const id = localStorage.getItem(K.ID);
+      var cp = localStorage.getItem(K.CP); if (cp && PROVIDERS[cp]) S.currentProvider = cp;
+      var l = localStorage.getItem(K.L); if (l !== null) S.lv = l === 'true';
+      var r = localStorage.getItem(K.R); if (r !== null) S.rv = r === 'true';
+      var id = localStorage.getItem(K.ID);
       if (id && S.cs.find(c => c.id === id)) S.cid = id;
       else if (S.cs.length > 0) S.cid = S.cs[0].id;
-      const ctx = localStorage.getItem(K.CTX); if (ctx !== null) S.ctxLimit = parseInt(ctx);
+      var ctx = localStorage.getItem(K.CTX); if (ctx !== null) S.ctxLimit = parseInt(ctx);
       if (E.cs) E.cs.value = S.ctxLimit;
-      const tok = localStorage.getItem(K.TOK); if (tok !== null) { S.maxTokens = parseInt(tok); if (E.ts) E.ts.value = S.maxTokens; }
-      const dm = localStorage.getItem(K.DM); if (dm !== null) S.dm = dm === 'true';
-      const t = localStorage.getItem(K.TEMP); if (t !== null) S.temp = parseFloat(t);
+      var tok = localStorage.getItem(K.TOK); if (tok !== null) { S.maxTokens = parseInt(tok); if (E.ts) E.ts.value = S.maxTokens; }
+      var dm = localStorage.getItem(K.DM); if (dm !== null) S.dm = dm === 'true';
+      var t = localStorage.getItem(K.TEMP); if (t !== null) S.temp = parseFloat(t);
       if (E.temp) E.temp.value = S.temp;
-      const fs = localStorage.getItem(K.FS); if (fs !== null) S.fontSize = parseInt(fs); else S.fontSize = 14;
+      var fs = localStorage.getItem(K.FS); if (fs !== null) S.fontSize = parseInt(fs); else S.fontSize = 14;
     } catch(e) { console.warn('load:outer', e.message); }
-    console.log('[Cache] loaded', S.cs.length, 'convs, keys:', Object.keys(localStorage).filter(k => k.startsWith('d')).join(','));
   }
 
   function getCurrentProvider() { return PROVIDERS[S.currentProvider]; }
@@ -946,7 +943,7 @@
 
   function applyTheme() { document.documentElement.setAttribute('data-theme', S.dm ? 'dark' : 'light'); E.tt.innerHTML = S.dm ? '☀️ 亮色模式' : '🌙 暗色模式'; }
   function toggleTheme() { S.dm = !S.dm; applyTheme(); save(); }
-  function init() { if(S.cs.length===0){try{var stored=localStorage.getItem(K.C);if(stored){var parsed=JSON.parse(stored);if(Array.isArray(parsed)){S.cs=parsed.map(normalizeConv).filter(Boolean);}else if(parsed&&parsed._version&&Array.isArray(parsed.conversations)){S.cs=parsed.conversations.map(normalizeConv).filter(Boolean);}else if(parsed&&parsed.messages){var n=normalizeConv(parsed);S.cs=n?[n]:[];}if(S.cs.length>0){var sid=localStorage.getItem(K.ID);if(sid&&S.cs.find(c=>c.id===sid))S.cid=sid;else S.cid=S.cs[0].id;}}}catch(e){}if(S.cs.length===0){S.cs.push({id:Date.now().toString(),title:'新对话',prompt:'你是一个专业的AI助手，请用中文回答。回答简洁准确，代码使用Markdown格式。',messages:[],history:[],createdAt:new Date().toISOString()});S.cid=S.cs[0].id;save();}}applyTheme();renderProviders();renderCL();loadC();updateSB();updateTokUI();checkVersion();renderCompareProviders();initFontSize();updateTotalTokenEstimate(); }
+  function init() { if(S.cs.length===0){S.cs.push({id:Date.now().toString(),title:'新对话',prompt:'你是一个专业的AI助手，请用中文回答。回答简洁准确，代码使用Markdown格式。',messages:[],history:[],createdAt:new Date().toISOString()});S.cid=S.cs[0].id;save();}applyTheme();renderProviders();renderCL();loadC();updateSB();updateTokUI();checkVersion();renderCompareProviders();initFontSize();updateTotalTokenEstimate(); }
   function gC(){return S.cs.find(c=>c.id===S.cid);}
   function createC(){const c={id:Date.now().toString(),title:'新对话',prompt:'你是一个专业的AI助手，请用中文回答。回答简洁准确，代码使用Markdown格式。',messages:[],history:[],createdAt:new Date().toISOString()};S.cs.unshift(c);S.cid=c.id;save();renderCL();loadC();}
   function deleteC(id){if(S.cs.length<=1){showToast('至少保留一个对话','warning');return;}S.cs=S.cs.filter(c=>c.id!==id);if(S.cid===id){S.cid=S.cs[0].id;loadC();}save();renderCL();}
