@@ -862,21 +862,24 @@
     };
   }
   function save() {
-    try { localStorage.setItem(K.C, JSON.stringify(S.cs)); } catch(e) { console.warn('save:C', e.message); }
+    var ok = true;
+    try { localStorage.setItem(K.C, JSON.stringify(S.cs)); } catch(e) { console.warn('save:C', e.message); ok = false; }
     try {
       const pc = JSON.parse(JSON.stringify(S.providers));
       Object.keys(pc).forEach(k => { if (pc[k].apiKey) try { pc[k].apiKey = btoa(encodeURIComponent(pc[k].apiKey)); } catch(ee) { pc[k].apiKey = ''; } });
       localStorage.setItem(K.P, JSON.stringify(pc));
-    } catch(e) { console.warn('save:P', e.message); }
-    try { localStorage.setItem(K.CP, S.currentProvider); } catch(e) {}
-    try { localStorage.setItem(K.L, S.lv); } catch(e) {}
-    try { localStorage.setItem(K.R, S.rv); } catch(e) {}
-    try { localStorage.setItem(K.ID, S.cid || ''); } catch(e) {}
-    try { localStorage.setItem(K.CTX, S.ctxLimit); } catch(e) {}
-    try { localStorage.setItem(K.TOK, S.maxTokens); } catch(e) {}
-    try { localStorage.setItem(K.DM, S.dm); } catch(e) {}
-    try { localStorage.setItem(K.TEMP, S.temp); } catch(e) {}
-    try { localStorage.setItem(K.FS, S.fontSize); } catch(e) {}
+    } catch(e) { console.warn('save:P', e.message); ok = false; }
+    try { localStorage.setItem(K.CP, S.currentProvider); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.L, S.lv); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.R, S.rv); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.ID, S.cid || ''); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.CTX, S.ctxLimit); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.TOK, S.maxTokens); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.DM, S.dm); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.TEMP, S.temp); } catch(e) { ok = false; }
+    try { localStorage.setItem(K.FS, S.fontSize); } catch(e) { ok = false; }
+    if (!ok) console.warn('[Save] some keys failed');
+    return ok;
   }
   function load() {
     try {
@@ -957,14 +960,12 @@
   E.ea.addEventListener('click',()=>{if(!S.exportId)return;const c=S.cs.find(c=>c.id===S.exportId);if(c){const d={title:c.title,prompt:c.prompt,messages:c.messages,history:c.history,createdAt:c.createdAt};downloadFile(c.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g,'_')+'.ai.json',JSON.stringify(d,null,2));}hideExport();});
   E.ec.addEventListener('click',hideExport);E.eo.addEventListener('click',function(e){if(e.target===E.eo)hideExport();});
   function importConv(){const inp=document.createElement('input');inp.type='file';inp.accept='.json,.ai.json';inp.addEventListener('change',async()=>{const f=inp.files[0];if(!f)return;try{const t=await f.text();const d=JSON.parse(t);let imported=[];
-// Format 1: export-all {version, conversations: [...]}
 if(d.conversations&&Array.isArray(d.conversations)){imported=d.conversations;}
-// Format 2: single conversation {messages, title, ...}
 else if(d.messages&&Array.isArray(d.messages)){imported=[d];}
 else{showToast('无效的文件格式','error');return;}
 let count=0;var now=Date.now();
 imported.forEach(function(conv){var c={id:Date.now().toString()+'_'+count,title:conv.title||'导入对话',prompt:conv.prompt||S.ap,messages:conv.messages||[],history:conv.history||[],createdAt:new Date().toISOString()};S.cs.unshift(c);count++;});
-if(count>0){S.cid=S.cs[0].id;save();renderCL();loadC();showToast('✅ 已导入 '+count+' 个对话','success');}}catch(e){showToast('导入失败: '+e.message,'error');}});inp.click();}
+if(count>0){S.cid=S.cs[0].id;var saved=save();renderCL();loadC();if(saved){showToast('✅ 已导入 '+count+' 个对话','success');}else{showToast('⚠️ 导入但缓存写入失败，刷新会丢失','error');}}}catch(e){showToast('导入失败: '+e.message,'error');}});inp.click();}
 
   function openEditModal(msgIdx) { const c = gC(); if (!c) return; S.editingMsgIdx = msgIdx; E.emt.value = c.messages[msgIdx].content; E.emo.classList.add('show'); E.emt.focus(); }
   function closeEditModal() { E.emo.classList.remove('show'); S.editingMsgIdx = null; }
@@ -1720,6 +1721,7 @@ S.pe=false;updatePromptUI();setTimeout(function(){if(typeof MathJax!=='undefined
   window.addEventListener('beforeunload', (e) => { save(); });
   window.addEventListener('pagehide', (e) => { save(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  window.addEventListener('beforeunload', (e) => { const c = gC(); if (c && c.messages && c.messages.length > 0) { e.preventDefault(); e.returnValue = '您有未保存的对话内容，确定离开吗？'; return e.returnValue; } });
   // Nav collapse
   (function(){var h=document.getElementById('idxNavHeader'),b=document.getElementById('idxNavBody'),a=document.getElementById('idxNavArrow');if(h)h.addEventListener('click',function(){var d=b.style.display==='none';b.style.display=d?'':'none';a.textContent=d?'▼':'▶';})})();
 
