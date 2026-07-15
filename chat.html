@@ -547,7 +547,7 @@
         <a href="mdtest.html" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;font-size:12px;color:var(--text-primary);text-decoration:none">📝 Markdown 测试</a>
       </div>
     </div>
-    <div class="sidebar-section"><h3>💬 对话列表</h3><button id="newConversationBtn" class="new-conv-btn">➕ 新建对话</button><div class="conversation-list" id="conversationList"></div><button id="importBtn" class="import-btn">📥 导入对话备份</button><button id="exportAllBtn" class="export-all-btn">📤 导出全部</button></div>
+    <div class="sidebar-section"><h3>💬 对话列表</h3><button id="newConversationBtn" class="new-conv-btn">➕ 新建对话</button><div class="conversation-list" id="conversationList"></div><button id="importBtn" class="import-btn">📥 导入对话备份</button><button id="exportAllBtn" class="export-all-btn">📤 导出全部</button><div id="storageIndicator" style="display:flex;align-items:center;gap:6px;margin-top:6px;padding:4px 8px;border-radius:6px;font-size:10px;color:var(--text-secondary);cursor:default"></div></div>
     <div class="sidebar-section"><h3>📋 Prompt <button id="modifyPromptBtn" class="lock-btn"><span id="modifyIcon">🔒</span> 修改</button></h3><textarea id="promptTextarea" class="prompt-textarea" disabled>你是一个专业的AI助手，请用中文回答。回答简洁准确，代码使用Markdown格式。</textarea><button id="confirmPromptBtn" class="confirm-btn" disabled>✅ 确定绑定</button><span id="promptStatus" style="font-size:10px;color:var(--text-secondary);margin-top:4px;display:block;text-align:center;"></span></div>
     <div class="theme-toggle"><button id="themeToggleBtn">🌙 暗色模式</button></div>
     <div class="font-size-selector"><label>📏 字号:</label><button class="font-size-btn" data-size="12">小</button><button class="font-size-btn active" data-size="14">中</button><button class="font-size-btn" data-size="16">大</button></div>
@@ -863,46 +863,25 @@
       createdAt: c.createdAt || new Date().toISOString()
     };
   }
-  // IndexedDB fallback for large conversation storage
-  function idbSave(key, data) {
-    return new Promise(function(resolve, reject) {
-      try {
-        var req = indexedDB.open('chat_store', 1);
-        req.onupgradeneeded = function(e) { e.target.result.createObjectStore('kv', { keyPath: 'k' }); };
-        req.onsuccess = function(e) {
-          var tx = e.target.result.transaction('kv', 'readwrite');
-          tx.objectStore('kv').put({ k: key, v: data });
-          tx.oncomplete = resolve;
-          tx.onerror = function() { reject(tx.error); };
-        };
-        req.onerror = function() { reject(req.error); };
-      } catch(e) { reject(e); }
-    });
-  }
-  function idbLoad(key, cb) {
-    try {
-      var req = indexedDB.open('chat_store', 1);
-      req.onupgradeneeded = function(e) { e.target.result.createObjectStore('kv', { keyPath: 'k' }); };
-      req.onsuccess = function(e) {
-        var tx = e.target.result.transaction('kv', 'readonly');
-        var r = tx.objectStore('kv').get(key);
-        r.onsuccess = function() { cb(r.result ? r.result.v : null); };
-        r.onerror = function() { cb(null); };
-      };
-      req.onerror = function() { cb(null); };
-    } catch(e) { cb(null); }
-  }
   function save() {
     var ok = true;
+    // Build compact data (strip redundant history)
+    function buildCompact() { return S.cs.map(function(c){ return { id:c.id, title:c.title, prompt:c.prompt, messages:c.messages, createdAt:c.createdAt }; }); }
     try {
-      var compact = S.cs.map(function(c){ return { id:c.id, title:c.title, prompt:c.prompt, messages:c.messages, createdAt:c.createdAt }; });
-      localStorage.setItem(K.C, JSON.stringify(compact));
+      localStorage.setItem(K.C, JSON.stringify(buildCompact()));
     } catch(e) {
-      console.warn('save:C localStorage full, fallback to IndexedDB', e.message);
-      try {
-        var compact = S.cs.map(function(c){ return { id:c.id, title:c.title, prompt:c.prompt, messages:c.messages, createdAt:c.createdAt }; });
-        idbSave(K.C, JSON.stringify(compact));
-      } catch(ee) { console.warn('save:C IndexedDB also failed', ee.message); ok = false; }
+      // Quota exceeded — trim oldest conversations until it fits
+      console.warn('save:C quota exceeded, trimming convs', e.message);
+      var trimmed = 0;
+      while (S.cs.length > 0) {
+        S.cs.pop(); trimmed++;
+        try { localStorage.setItem(K.C, JSON.stringify(buildCompact())); break; } catch(e2) {}
+      }
+      if (S.cs.length === 0) { ok = false; console.warn('save:C cannot save any convs'); }
+      else {
+        if (!S.cs.find(function(c){return c.id===S.cid;})) S.cid = S.cs[0].id;
+        console.log('save:C trimmed', trimmed, 'old convs, kept', S.cs.length);
+      }
     }
     try {
       const pc = JSON.parse(JSON.stringify(S.providers));
@@ -918,26 +897,13 @@
     try { localStorage.setItem(K.DM, S.dm); } catch(e) { ok = false; }
     try { localStorage.setItem(K.TEMP, S.temp); } catch(e) { ok = false; }
     try { localStorage.setItem(K.FS, S.fontSize); } catch(e) { ok = false; }
+    updateStorageUI();
     if (!ok) console.warn('[Save] some keys failed');
     return ok;
   }
   function load(cb) {
     try {
       var raw = localStorage.getItem(K.C);
-      if (!raw) {
-        idbLoad(K.C, function(idbData) {
-          if (idbData) {
-            try {
-              var parsed = JSON.parse(idbData);
-              if (Array.isArray(parsed)) { S.cs = parsed.map(normalizeConv).filter(Boolean); }
-              else if (parsed && parsed.messages) { var n = normalizeConv(parsed); S.cs = n ? [n] : []; }
-              else { S.cs = []; }
-            } catch(e) { console.warn('load:idb parse failed', e.message); S.cs = []; }
-          }
-          finishLoad(cb);
-        });
-        return;
-      }
       if (raw) {
         try {
           var parsed = JSON.parse(raw);
@@ -975,6 +941,15 @@
       var t = localStorage.getItem(K.TEMP); if (t !== null) S.temp = parseFloat(t);
       if (E.temp) E.temp.value = S.temp;
       var fs = localStorage.getItem(K.FS); if (fs !== null) S.fontSize = parseInt(fs); else S.fontSize = 14;
+      // One-time cleanup: remove old version keys (d* where * != 0) to free quota
+      var keepKeys = {};
+      Object.keys(K).forEach(function(kk){ keepKeys[K[kk]] = true; });
+      for (var ci = localStorage.length - 1; ci >= 0; ci--) {
+        var ck = localStorage.key(ci);
+        if (ck && ck.length > 1 && ck[0] === 'd' && !keepKeys[ck]) {
+          try { localStorage.removeItem(ck); } catch(e) {}
+        }
+      }
     } catch(e) { console.warn('finishLoad:err', e.message); }
     if (cb) cb();
   }
@@ -1055,7 +1030,23 @@ if(count>0){S.cid=S.cs[0].id;var saved=save();renderCL();loadC();if(saved){showT
     if (c.messages.length === 0) addE(); updateJL(); closeEditModal();
   });
 
-  function renderCL(){E.cl.innerHTML='';S.cs.forEach(c=>{const d=document.createElement('div');d.className=`conversation-item ${c.id===S.cid?'active':''}`;d.innerHTML=`<span class="conv-title" data-id="${c.id}" title="双击重命名">${esc(c.title)}</span><div class="conv-actions"><span class="conv-rename" data-id="${c.id}">✎</span><span class="conv-export" data-id="${c.id}">⬇</span><span class="conv-delete" data-id="${c.id}">✕</span></div>`;d.querySelector('.conv-title').addEventListener('click',e=>switchC(e.target.dataset.id));d.querySelector('.conv-title').addEventListener('dblclick',e=>{const s=e.target,id=s.dataset.id,conv=S.cs.find(c=>c.id===id);if(!conv)return;const inp=document.createElement('input');inp.type='text';inp.value=conv.title;inp.className='conv-title-input';s.replaceWith(inp);inp.focus();inp.select();const sv=()=>renameC(id,inp.value.trim()||conv.title);inp.addEventListener('blur',sv);inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur();}if(e.key==='Escape'){inp.value=conv.title;inp.blur();}});});d.querySelector('.conv-export').addEventListener('click',function(e){e.stopPropagation();showExport(c.id);});d.querySelector('.conv-rename').addEventListener('click',e=>{e.stopPropagation();d.querySelector('.conv-title').dispatchEvent(new MouseEvent('dblclick'));});d.querySelector('.conv-delete').addEventListener('click',e=>{e.stopPropagation();if(confirm(`删除"${c.title}"？`))deleteC(e.target.dataset.id);});E.cl.appendChild(d);});}
+  function convSizeBytes(c) {
+    return new Blob([JSON.stringify({id:c.id,title:c.title,prompt:c.prompt,messages:c.messages,createdAt:c.createdAt})]).size;
+  }
+  function updateStorageUI() {
+    var el = document.getElementById('storageIndicator');
+    if (!el) return;
+    var total = 0;
+    var max = 4.5 * 1024 * 1024;
+    S.cs.forEach(function(c){ total += convSizeBytes(c); });
+    var pct = total / max;
+    var color = pct < 0.6 ? 'var(--accent-green)' : (pct < 0.85 ? 'var(--accent-yellow)' : 'var(--accent-red)');
+    var barW = Math.min(pct * 100, 100);
+    var usedStr = (total / 1024 / 1024).toFixed(1) + 'MB';
+    el.innerHTML = '<span style="flex-shrink:0">💾</span><div style="flex:1;height:4px;background:var(--border-color);border-radius:2px;overflow:hidden"><div style="height:100%;width:' + barW + '%;background:' + color + ';border-radius:2px;transition:width 0.3s"></div></div><span style="flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums">' + usedStr + '</span>';
+    el.title = 'localStorage 使用: ' + usedStr + ' / ~4.5MB' + (pct > 0.85 ? '\n⚠️ 接近上限，建议导出备份旧对话' : '');
+  }
+  function renderCL(){E.cl.innerHTML='';S.cs.forEach(c=>{const d=document.createElement('div');d.className=`conversation-item ${c.id===S.cid?'active':''}`;var sz=convSizeBytes(c);var szStr=sz>1024?(sz/1024).toFixed(0)+'KB':sz+'B';d.innerHTML=`<span class="conv-title" data-id="${c.id}" title="双击重命名 | ${szStr}">${esc(c.title)}</span><span style="font-size:9px;color:var(--text-secondary);opacity:0.5;flex-shrink:0">${szStr}</span><div class="conv-actions"><span class="conv-rename" data-id="${c.id}">✎</span><span class="conv-export" data-id="${c.id}">⬇</span><span class="conv-delete" data-id="${c.id}">✕</span></div>`;d.querySelector('.conv-title').addEventListener('click',e=>switchC(e.target.dataset.id));d.querySelector('.conv-title').addEventListener('dblclick',e=>{const s=e.target,id=s.dataset.id,conv=S.cs.find(c=>c.id===id);if(!conv)return;const inp=document.createElement('input');inp.type='text';inp.value=conv.title;inp.className='conv-title-input';s.replaceWith(inp);inp.focus();inp.select();const sv=()=>renameC(id,inp.value.trim()||conv.title);inp.addEventListener('blur',sv);inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();inp.blur();}if(e.key==='Escape'){inp.value=conv.title;inp.blur();}});});d.querySelector('.conv-export').addEventListener('click',function(e){e.stopPropagation();showExport(c.id);});d.querySelector('.conv-rename').addEventListener('click',e=>{e.stopPropagation();d.querySelector('.conv-title').dispatchEvent(new MouseEvent('dblclick'));});d.querySelector('.conv-delete').addEventListener('click',e=>{e.stopPropagation();if(confirm(`删除"${c.title}"？`))deleteC(e.target.dataset.id);});E.cl.appendChild(d);});updateStorageUI();}
   function loadC(){const c=gC();if(!c)return;E.ct.textContent=c.title;S.ap=c.prompt;S.ch=[...c.history];E.pt.value=c.prompt;
 var wrap=document.getElementById('messagesWrapper');wrap.querySelectorAll('.conv-msgs').forEach(function(el){el.style.display='none';});var origContainer=document.getElementById('messagesContainer');if(origContainer)origContainer.style.display='none';
 var ac=document.getElementById('msgs-'+c.id);if(!ac){ac=document.createElement('div');ac.id='msgs-'+c.id;ac.className='conv-msgs';wrap.appendChild(ac);}
