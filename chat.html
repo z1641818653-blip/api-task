@@ -592,6 +592,7 @@
   <div class="modal-overlay" id="exportOverlay"><div class="modal-box"><h4>📤 导出对话</h4><div class="modal-btns" style="flex-direction:column;align-items:stretch;"><button id="exportTextBtn" style="margin-bottom:6px;">📄 导出文本 (.txt)</button><button id="exportAIBtn" style="margin-bottom:6px;">🤖 导出AI格式 (.ai.json)</button><button id="exportCancelBtn" class="btn-cancel" style="text-align:center;">取消</button></div></div></div>
   <div class="update-overlay" id="updateOverlay"><div class="update-modal"><h3>🎉 v4.0.2 版本已更新</h3><div class="update-body"><ul><li><strong>🔧 问题列表跳转</strong> — 修复多对话下跳转无效的问题</li><li><strong>💬 对话独立容器</strong> — 切换对话不影响后台输出</li></ul></div><button id="updateCloseBtn">知道了</button></div></div>
 
+<div id="toastContainer" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;"></div>
 <script>
 (function() {
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
@@ -862,13 +863,47 @@
       createdAt: c.createdAt || new Date().toISOString()
     };
   }
+  // IndexedDB fallback for large conversation storage
+  function idbSave(key, data) {
+    return new Promise(function(resolve, reject) {
+      try {
+        var req = indexedDB.open('chat_store', 1);
+        req.onupgradeneeded = function(e) { e.target.result.createObjectStore('kv', { keyPath: 'k' }); };
+        req.onsuccess = function(e) {
+          var tx = e.target.result.transaction('kv', 'readwrite');
+          tx.objectStore('kv').put({ k: key, v: data });
+          tx.oncomplete = resolve;
+          tx.onerror = function() { reject(tx.error); };
+        };
+        req.onerror = function() { reject(req.error); };
+      } catch(e) { reject(e); }
+    });
+  }
+  function idbLoad(key, cb) {
+    try {
+      var req = indexedDB.open('chat_store', 1);
+      req.onupgradeneeded = function(e) { e.target.result.createObjectStore('kv', { keyPath: 'k' }); };
+      req.onsuccess = function(e) {
+        var tx = e.target.result.transaction('kv', 'readonly');
+        var r = tx.objectStore('kv').get(key);
+        r.onsuccess = function() { cb(r.result ? r.result.v : null); };
+        r.onerror = function() { cb(null); };
+      };
+      req.onerror = function() { cb(null); };
+    } catch(e) { cb(null); }
+  }
   function save() {
     var ok = true;
     try {
-      // Strip redundant history from each conversation to save ~50% space
       var compact = S.cs.map(function(c){ return { id:c.id, title:c.title, prompt:c.prompt, messages:c.messages, createdAt:c.createdAt }; });
       localStorage.setItem(K.C, JSON.stringify(compact));
-    } catch(e) { console.warn('save:C', e.message); ok = false; }
+    } catch(e) {
+      console.warn('save:C localStorage full, fallback to IndexedDB', e.message);
+      try {
+        var compact = S.cs.map(function(c){ return { id:c.id, title:c.title, prompt:c.prompt, messages:c.messages, createdAt:c.createdAt }; });
+        idbSave(K.C, JSON.stringify(compact));
+      } catch(ee) { console.warn('save:C IndexedDB also failed', ee.message); ok = false; }
+    }
     try {
       const pc = JSON.parse(JSON.stringify(S.providers));
       Object.keys(pc).forEach(k => { if (pc[k].apiKey) try { pc[k].apiKey = btoa(encodeURIComponent(pc[k].apiKey)); } catch(ee) { pc[k].apiKey = ''; } });
@@ -886,9 +921,23 @@
     if (!ok) console.warn('[Save] some keys failed');
     return ok;
   }
-  function load() {
+  function load(cb) {
     try {
       var raw = localStorage.getItem(K.C);
+      if (!raw) {
+        idbLoad(K.C, function(idbData) {
+          if (idbData) {
+            try {
+              var parsed = JSON.parse(idbData);
+              if (Array.isArray(parsed)) { S.cs = parsed.map(normalizeConv).filter(Boolean); }
+              else if (parsed && parsed.messages) { var n = normalizeConv(parsed); S.cs = n ? [n] : []; }
+              else { S.cs = []; }
+            } catch(e) { console.warn('load:idb parse failed', e.message); S.cs = []; }
+          }
+          finishLoad(cb);
+        });
+        return;
+      }
       if (raw) {
         try {
           var parsed = JSON.parse(raw);
@@ -899,6 +948,11 @@
           } else { S.cs = []; }
         } catch(e) { console.warn('load:parse C failed', e.message); S.cs = []; }
       }
+      finishLoad(cb);
+    } catch(e) { console.warn('load:outer', e.message); if (cb) cb(); }
+  }
+  function finishLoad(cb) {
+    try {
       var p = localStorage.getItem(K.P);
       if (p) {
         try {
@@ -921,7 +975,8 @@
       var t = localStorage.getItem(K.TEMP); if (t !== null) S.temp = parseFloat(t);
       if (E.temp) E.temp.value = S.temp;
       var fs = localStorage.getItem(K.FS); if (fs !== null) S.fontSize = parseInt(fs); else S.fontSize = 14;
-    } catch(e) { console.warn('load:outer', e.message); }
+    } catch(e) { console.warn('finishLoad:err', e.message); }
+    if (cb) cb();
   }
 
   function getCurrentProvider() { return PROVIDERS[S.currentProvider]; }
@@ -1730,9 +1785,8 @@ S.pe=false;updatePromptUI();setTimeout(function(){if(typeof MathJax!=='undefined
   // Nav collapse
   (function(){var h=document.getElementById('idxNavHeader'),b=document.getElementById('idxNavBody'),a=document.getElementById('idxNavArrow');if(h)h.addEventListener('click',function(){var d=b.style.display==='none';b.style.display=d?'':'none';a.textContent=d?'▼':'▶';})})();
 
-  load();init();updatePromptUI();updateTokUI();setTimeout(checkScroll,500);
+  load(function(){ init(); updatePromptUI(); updateTokUI(); setTimeout(checkScroll,500); });
 })();
 </script>
-  <div id="toastContainer"></div>
 </body>
 </html>
