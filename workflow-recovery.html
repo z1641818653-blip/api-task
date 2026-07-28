@@ -1092,11 +1092,11 @@ async function executeNode(nodeId) {
   }
 }
 
-async function executeAll(nodeId) {
+async function executeAll() {
   if (isRunning) { showToast('正在执行中', 'warning'); return; }
   var wf = getActiveWorkflow();
   if (!wf) return;
-  const node = findNode(wf.tree, nodeId);
+  const node = ensureMainNode(wf);
   if (!node) return;
   if (!providerState.apiKey) { showToast('请先设置 API Key', 'warning'); return; }
 
@@ -1697,7 +1697,7 @@ function renderWorkspace() {
   });
   document.getElementById('btnExecuteAll').addEventListener('click', function() {
     saveCurrentNodeEdit();
-    if (selectedNodeId) executeAll(selectedNodeId);
+    executeAll();
   });
   document.getElementById('btnStop').addEventListener('click', function() { stopExecution(); });
 }
