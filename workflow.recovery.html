@@ -289,6 +289,18 @@ body{
 .node-status.stopped{background:#f59e0b}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .t-node.locked .node-drag{opacity:.12;cursor:default}
+.t-node.dragging{opacity:.45;transform:scale(.98)}
+.t-node.drop-child{
+  border-color:var(--primary)!important;
+  background:color-mix(in srgb,var(--primary) 9%,var(--surface))!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 16%,transparent)!important
+}
+.t-node.drop-before::after,.t-node.drop-after::after{
+  content:'';position:absolute;left:8px;right:8px;height:2px;
+  background:var(--primary);border-radius:2px;box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 12%,transparent)
+}
+.t-node.drop-before::after{top:-10px}
+.t-node.drop-after::after{bottom:-10px}
 
 /* TREE BUTTONS */
 .tree-buttons{
@@ -420,6 +432,7 @@ let workflows = [];
 let activeWorkflowId = null;
 let selectedNodeId = null;
 let copiedNode = null;
+let draggedNodeId = null;
 let abortController = null;
 let isRunning = false;
 let runQueue = [];
@@ -787,53 +800,82 @@ function removeNodeFromParent(root, nodeId) {
   return null;
 }
 
-function moveNodeBefore(nodeId, targetId) {
-  var wf = getActiveWorkflow();
-  if (!wf) return;
+function validateNodeMove(wf, nodeId, targetId, mode) {
+  if (!wf || !nodeId || !targetId || nodeId === targetId) {
+    showToast('不能移动到当前节点', 'warning');
+    return null;
+  }
   ensureMainNode(wf);
-  if (isMainNode(wf, nodeId)) { showToast('主节点不能移动', 'warning'); return; }
-  if (isMainNode(wf, targetId)) { showToast('主节点不能创建同级节点', 'warning'); return; }
-  const node = removeNodeFromParent(wf.tree, nodeId);
-  if (!node) return;
-  const targetParent = findParent(wf.tree, targetId);
-  if (!targetParent) { wf.tree.children.push(node); return; }
-  const tIdx = targetParent.children.findIndex(c => c.id === targetId);
-  targetParent.children.splice(tIdx, 0, node);
-  updateParentRefs(node, targetParent.id);
+  var node = findNode(wf.tree, nodeId);
+  var target = findNode(wf.tree, targetId);
+  if (!node || !target) {
+    showToast('移动目标不存在', 'error');
+    return null;
+  }
+  if (isMainNode(wf, node)) {
+    showToast('主节点不能移动', 'warning');
+    return null;
+  }
+  if (node.locked) {
+    showToast('锁定节点不能移动', 'warning');
+    return null;
+  }
+  if (findNode(node, targetId)) {
+    showToast('不能移动到自己的子节点中', 'warning');
+    return null;
+  }
+  if ((mode === 'before' || mode === 'after') && isMainNode(wf, target)) {
+    showToast('主节点不能创建同级节点', 'warning');
+    return null;
+  }
+  var targetParent = mode === 'child' ? null : findParent(wf.tree, targetId);
+  if (mode !== 'child' && !targetParent) {
+    showToast('无法确定目标位置', 'error');
+    return null;
+  }
+  return { node: node, target: target, targetParent: targetParent };
+}
+
+function finishNodeMove(node, parentId) {
+  updateParentRefs(node, parentId);
   saveState();
   renderAll();
+  return true;
+}
+
+function moveNodeBefore(nodeId, targetId) {
+  var wf = getActiveWorkflow();
+  var move = validateNodeMove(wf, nodeId, targetId, 'before');
+  if (!move) return false;
+  var node = removeNodeFromParent(wf.tree, nodeId);
+  if (!node) return false;
+  var targetIndex = move.targetParent.children.findIndex(function(child) { return child.id === targetId; });
+  if (targetIndex < 0) return false;
+  move.targetParent.children.splice(targetIndex, 0, node);
+  return finishNodeMove(node, move.targetParent.id);
 }
 
 function moveNodeAfter(nodeId, targetId) {
   var wf = getActiveWorkflow();
-  if (!wf) return;
-  ensureMainNode(wf);
-  if (isMainNode(wf, nodeId)) { showToast('主节点不能移动', 'warning'); return; }
-  if (isMainNode(wf, targetId)) { showToast('主节点不能创建同级节点', 'warning'); return; }
-  const node = removeNodeFromParent(wf.tree, nodeId);
-  if (!node) return;
-  const targetParent = findParent(wf.tree, targetId);
-  if (!targetParent) { wf.tree.children.unshift(node); return; }
-  const tIdx = targetParent.children.findIndex(c => c.id === targetId);
-  targetParent.children.splice(tIdx + 1, 0, node);
-  updateParentRefs(node, targetParent.id);
-  saveState();
-  renderAll();
+  var move = validateNodeMove(wf, nodeId, targetId, 'after');
+  if (!move) return false;
+  var node = removeNodeFromParent(wf.tree, nodeId);
+  if (!node) return false;
+  var targetIndex = move.targetParent.children.findIndex(function(child) { return child.id === targetId; });
+  if (targetIndex < 0) return false;
+  move.targetParent.children.splice(targetIndex + 1, 0, node);
+  return finishNodeMove(node, move.targetParent.id);
 }
 
 function moveNodeAsChild(nodeId, targetId) {
   var wf = getActiveWorkflow();
-  if (!wf) return;
-  ensureMainNode(wf);
-  if (isMainNode(wf, nodeId)) { showToast('主节点不能移动', 'warning'); return; }
-  const node = removeNodeFromParent(wf.tree, nodeId);
-  if (!node) return;
-  const target = findNode(wf.tree, targetId);
-  if (!target) { wf.tree.children.push(node); return; }
-  target.children.push(node);
-  updateParentRefs(node, target.id);
-  saveState();
-  renderAll();
+  var move = validateNodeMove(wf, nodeId, targetId, 'child');
+  if (!move) return false;
+  var node = removeNodeFromParent(wf.tree, nodeId);
+  if (!node) return false;
+  move.target.children.push(node);
+  if (move.target._collapsed) move.target._collapsed = false;
+  return finishNodeMove(node, move.target.id);
 }
 
 function countDescendants(node) {
@@ -1711,7 +1753,8 @@ function renderNode(node, depth) {
   let stat = node.status || 'pending';
   let html = '<li>';
   html += '<div class="t-node' + sel + col + lok + '" data-id="' + node.id + '">';
-  html += '<span class="node-drag">⠿</span>';
+  var movable = !isMainNode(wf, node) && !node.locked;
+  html += '<span class="node-drag" draggable="' + (movable ? 'true' : 'false') + '" data-id="' + node.id + '" title="' + (movable ? '拖拽移动节点' : '此节点不可移动') + '">⠿</span>';
   html += '<span class="node-num">' + (path ? path + '级' : '') + '</span>';
   html += '<span class="node-title">' + esc(node.title || '新节点') + '</span>';
   if(node.locked) html += '<span style="font-size:9px;color:var(--text2)">🔒</span>';
@@ -1739,6 +1782,71 @@ document.getElementById('treeContainer').addEventListener('contextmenu', functio
   var card = e.target.closest('.t-node');
   if (!card) return;
   showContextMenu(e, card.dataset.id);
+});
+
+function clearTreeDropIndicators() {
+  document.querySelectorAll('#treeContainer .t-node.drop-before,#treeContainer .t-node.drop-after,#treeContainer .t-node.drop-child').forEach(function(card) {
+    card.classList.remove('drop-before', 'drop-after', 'drop-child');
+  });
+}
+
+function getTreeDropMode(card, clientY) {
+  var rect = card.getBoundingClientRect();
+  var ratio = rect.height ? (clientY - rect.top) / rect.height : 0.5;
+  if (ratio < 0.28) return 'before';
+  if (ratio > 0.72) return 'after';
+  return 'child';
+}
+
+document.getElementById('treeContainer').addEventListener('dragstart', function(e) {
+  var handle = e.target.closest('.node-drag');
+  if (!handle || handle.getAttribute('draggable') !== 'true') {
+    e.preventDefault();
+    return;
+  }
+  draggedNodeId = handle.dataset.id;
+  var card = handle.closest('.t-node');
+  if (card) card.classList.add('dragging');
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', draggedNodeId);
+  }
+});
+
+document.getElementById('treeContainer').addEventListener('dragover', function(e) {
+  var card = e.target.closest('.t-node');
+  if (!card || !draggedNodeId || card.dataset.id === draggedNodeId) return;
+  var wf = getActiveWorkflow();
+  var draggedNode = wf ? findNode(wf.tree, draggedNodeId) : null;
+  if (!draggedNode || findNode(draggedNode, card.dataset.id)) return;
+  var mode = getTreeDropMode(card, e.clientY);
+  if ((mode === 'before' || mode === 'after') && wf && isMainNode(wf, card.dataset.id)) return;
+  e.preventDefault();
+  clearTreeDropIndicators();
+  card.classList.add('drop-' + mode);
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+});
+
+document.getElementById('treeContainer').addEventListener('drop', function(e) {
+  var card = e.target.closest('.t-node');
+  if (!card || !draggedNodeId) return;
+  e.preventDefault();
+  var targetId = card.dataset.id;
+  var mode = getTreeDropMode(card, e.clientY);
+  var moved = mode === 'before' ? moveNodeBefore(draggedNodeId, targetId) :
+              mode === 'after' ? moveNodeAfter(draggedNodeId, targetId) :
+              moveNodeAsChild(draggedNodeId, targetId);
+  draggedNodeId = null;
+  clearTreeDropIndicators();
+  if (moved) showToast('节点已移动', 'success');
+});
+
+document.getElementById('treeContainer').addEventListener('dragend', function() {
+  draggedNodeId = null;
+  document.querySelectorAll('#treeContainer .t-node.dragging').forEach(function(card) {
+    card.classList.remove('dragging');
+  });
+  clearTreeDropIndicators();
 });
 
 // ── Workflow list functions ──
