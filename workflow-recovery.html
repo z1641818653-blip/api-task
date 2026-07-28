@@ -97,16 +97,27 @@ body{
   position:relative;z-index:420;overflow:visible;background:var(--surface)
 }
 .panel-right .body{flex:1;overflow-x:auto;overflow-y:auto;padding:12px 8px;min-height:0;display:flex;flex-direction:column;align-items:center}
-.flow-header-actions{margin-left:auto;display:flex;align-items:center;gap:5px;position:relative}
-.version-mini{
-  height:22px;min-width:29px;padding:0 5px;border-radius:7px;border:1px solid var(--border);
-  display:inline-flex;align-items:center;justify-content:center;gap:2px;background:var(--surface2);
-  color:var(--text2);font-size:12px;font-weight:800;cursor:pointer;line-height:1
+.flow-header-title{white-space:nowrap;flex:0 0 auto}
+.flow-version-actions{
+  display:inline-flex;align-items:center;height:22px;overflow:hidden;border:1px solid var(--border);
+  border-radius:8px;background:var(--surface2);box-shadow:0 1px 2px rgba(45,27,78,.05);flex:0 0 auto
 }
-.version-mini:hover:not(:disabled){border-color:var(--primary);color:var(--primary);background:var(--surface)}
-.version-mini:disabled{opacity:.36;cursor:not-allowed}
-.version-mini-count{font-size:8px;font-weight:700;min-width:6px}
-.flow-help{position:relative;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--surface));font-size:13px;font-weight:900;cursor:help;outline:none;z-index:430}
+.version-mini{
+  width:30px;height:20px;padding:0;border:0;border-radius:0;
+  display:inline-flex;align-items:center;justify-content:center;gap:2px;background:transparent;
+  color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;line-height:1;
+  transition:background .15s,color .15s
+}
+.version-mini + .version-mini{border-left:1px solid var(--border)}
+.version-mini:hover:not(:disabled){color:var(--primary);background:var(--surface)}
+.version-mini:active:not(:disabled){background:color-mix(in srgb,var(--primary) 10%,var(--surface))}
+.version-mini:disabled{opacity:.3;cursor:not-allowed}
+.version-mini-count{
+  min-width:10px;height:12px;padding:0 2px;border-radius:6px;display:inline-flex;align-items:center;
+  justify-content:center;background:color-mix(in srgb,var(--text2) 10%,transparent);
+  font-size:7px;font-weight:800;line-height:1
+}
+.flow-help{position:relative;margin-left:auto;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--surface));font-size:13px;font-weight:900;cursor:help;outline:none;z-index:430;flex:0 0 22px}
 .flow-help:hover,.flow-help:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent)}
 .flow-help-tooltip{
   position:absolute;top:29px;right:0;width:238px;padding:11px 12px;border:1px solid var(--border);
@@ -266,56 +277,29 @@ body{
   box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 18%,transparent),0 3px 9px rgba(45,27,78,.10)
 }
 .t-node.locked{opacity:.82;background:var(--surface2)}
-.t-node.color-red{--node-color:#ef4444;--node-tint:rgba(239,68,68,.08)}
-.t-node.color-orange{--node-color:#f97316;--node-tint:rgba(249,115,22,.08)}
-.t-node.color-yellow{--node-color:#eab308;--node-tint:rgba(234,179,8,.09)}
-.t-node.color-green{--node-color:#22c55e;--node-tint:rgba(34,197,94,.08)}
-.t-node.color-teal{--node-color:#14b8a6;--node-tint:rgba(20,184,166,.08)}
-.t-node.color-cyan{--node-color:#06b6d4;--node-tint:rgba(6,182,212,.08)}
-.t-node.color-blue{--node-color:#3b82f6;--node-tint:rgba(59,130,246,.08)}
-.t-node.color-indigo{--node-color:#6366f1;--node-tint:rgba(99,102,241,.08)}
-.t-node.color-purple{--node-color:#8b5cf6;--node-tint:rgba(139,92,246,.08)}
-.t-node.color-pink{--node-color:#ec4899;--node-tint:rgba(236,72,153,.08)}
-.t-node.color-gray{--node-color:#64748b;--node-tint:rgba(100,116,139,.08)}
-.t-node[class*="color-"]{
-  border-color:color-mix(in srgb,var(--node-color) 55%,var(--border));
-  background:linear-gradient(90deg,var(--node-tint),transparent 68%),var(--surface);
-  box-shadow:0 2px 6px rgba(45,27,78,.07)
+.t-node.color-red{--node-color:#ef4444}
+.t-node.color-orange{--node-color:#f97316}
+.t-node.color-yellow{--node-color:#eab308}
+.t-node.color-green{--node-color:#22c55e}
+.t-node.color-teal{--node-color:#14b8a6}
+.t-node.color-cyan{--node-color:#06b6d4}
+.t-node.color-blue{--node-color:#3b82f6}
+.t-node.color-indigo{--node-color:#6366f1}
+.t-node.color-purple{--node-color:#8b5cf6}
+.t-node.color-pink{--node-color:#ec4899}
+.t-node.color-gray{--node-color:#64748b}
+.node-color-tag{
+  position:absolute;left:-8px;top:50%;width:5px;height:18px;transform:translateY(-50%);
+  border-radius:4px;background:var(--node-color);border:1px solid color-mix(in srgb,var(--node-color) 75%,#111827);
+  box-shadow:0 0 0 2px var(--surface),0 2px 5px color-mix(in srgb,var(--node-color) 35%,transparent);
+  pointer-events:auto;transition:width .15s,left .15s
 }
-.t-node[class*="color-"]::before{
-  content:'';position:absolute;top:-1px;left:11px;right:11px;height:3px;
-  background:var(--node-color);border-radius:0 0 4px 4px;
-  box-shadow:0 1px 3px color-mix(in srgb,var(--node-color) 28%,transparent)
-}
-.t-node.selected[class*="color-"]{
-  border-color:var(--primary);
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 18%,transparent),0 3px 9px rgba(45,27,78,.10)
-}
-.t-node.locked[class*="color-"]{
-  background:linear-gradient(90deg,var(--node-tint),transparent 68%),var(--surface2)
-}
-.t-node[class*="color-"] .node-num{
-  color:color-mix(in srgb,var(--node-color) 82%,var(--text));
-  background:color-mix(in srgb,var(--node-color) 13%,transparent);
-  border-radius:4px;padding:1px 3px
-}
-.t-node[class*="color-"] .node-drag{color:var(--node-color);opacity:.42}
+.t-node:hover .node-color-tag{width:6px;left:-9px}
 .node-drag{font-size:10px;opacity:.22;cursor:grab;user-select:none;line-height:1}
 .node-drag:hover{opacity:.65}
 .node-num{font-size:9px;font-weight:700;color:var(--primary);white-space:nowrap}
 .node-title{font-size:10px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px;display:inline-block}
-.node-status{
-  position:absolute;top:-4px;right:-4px;width:6px;height:6px;border-radius:50%;
-  border:2px solid var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)
-}
-.node-status.pending{background:#94a3b8}
-.node-status.running{background:#f59e0b;animation:pulse .8s infinite}
-.node-status.done{background:#10b981}
-.node-status.error,.node-status.failed{background:#ef4444}
-.node-status.stopped{background:#f59e0b}
-.node-status.blocked{background:#7f1d1d}
-.node-status.stale{background:#f59e0b}
-.t-node.state-red,.t-node.validation-input,.t-node.runtime-failed{
+.t-node.validation-input,.t-node.runtime-failed{
   background:#dc2626!important;border-color:#991b1b!important;color:#fff!important;
   box-shadow:0 0 0 2px rgba(220,38,38,.18),0 4px 12px rgba(127,29,29,.25)!important;
   opacity:1!important
@@ -342,11 +326,6 @@ body{
 }
 [data-theme="dark"] .t-node.state-gray{background:#475569!important;border-color:#64748b!important;color:#f8fafc!important}
 [data-theme="dark"] .t-node.state-gray span{color:#f8fafc!important}
-.t-node.state-red .node-status,.t-node.state-blue .node-status,.t-node.state-green .node-status,
-.t-node.validation-input .node-status,.t-node.validation-prompt .node-status,.t-node.runtime-failed .node-status{
-  border-color:rgba(255,255,255,.9)
-}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .t-node.locked .node-drag{opacity:.12;cursor:default}
 .t-node.dragging{opacity:.45;transform:scale(.98)}
 .t-node.drop-child{
@@ -462,11 +441,12 @@ body{
   <aside class="panel-right" id="panelRight">
     <div class="resize-handle" id="resizeHandle"></div>
     <div class="header">
-      <span>🌳 流程控制</span>
-      <span class="flow-header-actions">
-        <button class="version-mini" id="btnUndoVersion" disabled title="撤销上一次流程修改">↶<span class="version-mini-count" id="undoVersionCount">0</span></button>
-        <button class="version-mini" id="btnRedoVersion" disabled title="重做刚才撤销的修改">↷<span class="version-mini-count" id="redoVersionCount">0</span></button>
-        <span class="flow-help" tabindex="0" aria-label="查看五种节点颜色说明">?
+      <span class="flow-header-title">🌳 流程控制</span>
+      <span class="flow-version-actions">
+        <button class="version-mini" id="btnUndoVersion" disabled title="撤销上一次流程修改" aria-label="撤销上一次流程修改">↶<span class="version-mini-count" id="undoVersionCount">0</span></button>
+        <button class="version-mini" id="btnRedoVersion" disabled title="重做刚才撤销的修改" aria-label="重做刚才撤销的修改">↷<span class="version-mini-count" id="redoVersionCount">0</span></button>
+      </span>
+      <span class="flow-help" tabindex="0" aria-label="查看五种节点颜色说明">?
           <span class="flow-help-tooltip" role="tooltip">
             <span class="flow-help-title">五种节点状态颜色</span>
             <span class="flow-help-row"><span class="flow-help-swatch gray"></span><span><b>灰色</b>：从未执行或等待执行</span></span>
@@ -474,9 +454,8 @@ body{
             <span class="flow-help-row"><span class="flow-help-swatch green"></span><span><b>绿色</b>：执行完成，当前输出有效且可以复用</span></span>
             <span class="flow-help-row"><span class="flow-help-swatch red"></span><span><b>红色</b>：输入缺失、执行错误或依赖阻塞</span></span>
             <span class="flow-help-row"><span class="flow-help-swatch blue"></span><span><b>蓝色</b>：输入有效，但 Prompt 为空</span></span>
-            <span style="display:block;margin-top:7px;color:var(--text2)">节点顶部细色条仍是自定义分类标签，不属于运行状态。</span>
+            <span style="display:block;margin-top:7px;color:var(--text2)">节点左侧的外置色签是自定义分类标签，不属于运行状态。</span>
           </span>
-        </span>
       </span>
     </div>
     <div class="body" id="treeBody"><div id="treeContainer"></div></div>
@@ -1926,12 +1905,15 @@ function renderNode(node, depth) {
                         stat === 'running' ? '正在执行' : '等待执行';
   let html = '<li>';
   html += '<div class="t-node' + sel + col + lok + stateClass + '" data-id="' + node.id + '" title="' + escAttr(validationTitle) + '">';
+  if (node.color) {
+    var nodeColorLabels = { red:'红', orange:'橙', yellow:'黄', green:'绿', teal:'青绿', cyan:'青', blue:'蓝', indigo:'靛蓝', purple:'紫', pink:'粉', gray:'灰' };
+    html += '<span class="node-color-tag" title="分类色：' + (nodeColorLabels[node.color] || node.color) + '"></span>';
+  }
   var movable = !isMainNode(wf, node) && !node.locked;
   html += '<span class="node-drag" draggable="' + (movable ? 'true' : 'false') + '" data-id="' + node.id + '" title="' + (movable ? '拖拽移动节点' : '此节点不可移动') + '">⠿</span>';
   html += '<span class="node-num">' + (path ? path + '级' : '') + '</span>';
   html += '<span class="node-title">' + esc(node.title || '新节点') + '</span>';
   if(node.locked) html += '<span style="font-size:9px;color:var(--text2)">🔒</span>';
-  html += '<span class="node-status ' + stat + '"></span>';
   html += '</div>';
   if (node.children && node.children.length > 0) {
     html += '<ul>';
