@@ -378,6 +378,48 @@ function createNode(title, opts) {
 
 function getActiveWorkflow(){return workflows.find(w=>w.id===activeWorkflowId);}
 
+function getMainNode(wf) {
+  if (!wf || !wf.tree || !Array.isArray(wf.tree.children)) return null;
+  return wf.tree.children.find(function(n) { return n && n._isMainNode === true; }) || wf.tree.children[0] || null;
+}
+
+function ensureMainNode(wf) {
+  if (!wf) return null;
+  if (!wf.tree || typeof wf.tree !== 'object') wf.tree = createNode('流程根节点');
+  if (!Array.isArray(wf.tree.children)) wf.tree.children = [];
+  var mainNode = getMainNode(wf);
+  if (!mainNode) {
+    mainNode = createNode('主任务');
+    wf.tree.children.unshift(mainNode);
+  } else {
+    var mainIndex = wf.tree.children.indexOf(mainNode);
+    if (mainIndex > 0) {
+      wf.tree.children.splice(mainIndex, 1);
+      wf.tree.children.unshift(mainNode);
+    }
+  }
+  mainNode._isMainNode = true;
+  mainNode.locked = true;
+  if (!mainNode.title) mainNode.title = '主任务';
+  (function clearDuplicateMainMarkers(node) {
+    if (!node || !Array.isArray(node.children)) return;
+    node.children.forEach(function(child) {
+      if (child !== mainNode && child && child._isMainNode === true) delete child._isMainNode;
+      clearDuplicateMainMarkers(child);
+    });
+  })(wf.tree);
+  updateParentRefs(wf.tree, null);
+  return mainNode;
+}
+
+function isMainNode(wf, nodeOrId) {
+  if (!wf || !nodeOrId) return false;
+  var node = typeof nodeOrId === 'string' ? findNode(wf.tree, nodeOrId) : nodeOrId;
+  if (!node) return false;
+  var mainNode = getMainNode(wf);
+  return node._isMainNode === true || !!(mainNode && mainNode.id === node.id);
+}
+
 // ── Tree operations ──
 function findNode(root, id) {
   if (!root) return null;
@@ -430,6 +472,8 @@ function getNodePath(root, id) {
 }
 
 function updateParentRefs(node, parentId) {
+  if (!node || typeof node !== 'object') return;
+  if (!Array.isArray(node.children)) node.children = [];
   node._parentId = parentId;
   for (const c of node.children) updateParentRefs(c, node.id);
 }
@@ -437,6 +481,7 @@ function updateParentRefs(node, parentId) {
 function addChild(parentId, title) {
   var wf = getActiveWorkflow();
   if (!wf) return null;
+  ensureMainNode(wf);
   const parent = findNode(wf.tree, parentId);
   if (!parent) return null;
   const node = createNode(title || '新节点');
@@ -457,10 +502,11 @@ function hasLockedDescendant(node) {
 function deleteNode(nodeId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  const mainNode = ensureMainNode(wf);
   const node = findNode(wf.tree, nodeId);
   if (!node) return;
+  if (isMainNode(wf, node)) { showToast('主节点是流程锚点，不能删除', 'warning'); return; }
   if (node.locked) { showToast('锁定节点不能删除', 'warning'); return; }
-  if (wf && wf.tree.children[0] && nodeId === wf.tree.children[0].id && wf.tree.children.length <= 1) { showToast('至少保留一个主节点', 'warning'); return; }
   if (hasLockedDescendant(node)) {
     showConfirm('该节点下存在锁定子节点，确定全部删除吗？', function() {
       doDeleteNode(nodeId);
@@ -472,6 +518,12 @@ function deleteNode(nodeId) {
 function doDeleteNode(nodeId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  var mainNode = ensureMainNode(wf);
+  if (isMainNode(wf, nodeId)) {
+    selectedNodeId = mainNode ? mainNode.id : null;
+    showToast('主节点是流程锚点，不能删除', 'warning');
+    return;
+  }
   const parent = findParent(wf.tree, nodeId);
   if (!parent) return;
   const idx = parent.children.findIndex(c => c.id === nodeId);
@@ -484,7 +536,10 @@ function doDeleteNode(nodeId) {
 function removeNodeFromParent(root, nodeId) {
   if (!root) return null;
   for (let i = 0; i < root.children.length; i++) {
-    if (root.children[i].id === nodeId) return root.children.splice(i, 1)[0];
+    if (root.children[i].id === nodeId) {
+      if (root.children[i]._isMainNode === true) return null;
+      return root.children.splice(i, 1)[0];
+    }
     const found = removeNodeFromParent(root.children[i], nodeId);
     if (found) return found;
   }
@@ -494,6 +549,9 @@ function removeNodeFromParent(root, nodeId) {
 function moveNodeBefore(nodeId, targetId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  ensureMainNode(wf);
+  if (isMainNode(wf, nodeId)) { showToast('主节点不能移动', 'warning'); return; }
+  if (isMainNode(wf, targetId)) { showToast('主节点不能创建同级节点', 'warning'); return; }
   const node = removeNodeFromParent(wf.tree, nodeId);
   if (!node) return;
   const targetParent = findParent(wf.tree, targetId);
@@ -508,6 +566,9 @@ function moveNodeBefore(nodeId, targetId) {
 function moveNodeAfter(nodeId, targetId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  ensureMainNode(wf);
+  if (isMainNode(wf, nodeId)) { showToast('主节点不能移动', 'warning'); return; }
+  if (isMainNode(wf, targetId)) { showToast('主节点不能创建同级节点', 'warning'); return; }
   const node = removeNodeFromParent(wf.tree, nodeId);
   if (!node) return;
   const targetParent = findParent(wf.tree, targetId);
@@ -522,6 +583,8 @@ function moveNodeAfter(nodeId, targetId) {
 function moveNodeAsChild(nodeId, targetId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  ensureMainNode(wf);
+  if (isMainNode(wf, nodeId)) { showToast('主节点不能移动', 'warning'); return; }
   const node = removeNodeFromParent(wf.tree, nodeId);
   if (!node) return;
   const target = findNode(wf.tree, targetId);
@@ -548,8 +611,10 @@ function dfsNodes(node, acc) {
 function copyNode(nodeId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  ensureMainNode(wf);
   const node = findNode(wf.tree, nodeId);
   if (!node) return;
+  if (isMainNode(wf, node)) { showToast('主节点不能复制', 'warning'); return; }
   copiedNode = JSON.parse(JSON.stringify(node));
   delete copiedNode.id;
   showToast('节点已复制', 'success');
@@ -582,8 +647,15 @@ function pasteNode(targetId) {
 function toggleNodeLock(id) {
   var wf = getActiveWorkflow();
   if (!wf) return;
+  var mainNode = ensureMainNode(wf);
   var n = findNode(wf.tree, id);
   if (!n) return;
+  if (isMainNode(wf, n)) {
+    mainNode.locked = true;
+    showToast('主节点必须保持锁定', 'warning');
+    renderAll();
+    return;
+  }
   n.locked = !n.locked;
   saveState();
   renderAll();
@@ -1111,8 +1183,8 @@ function renderSettings() {
         var wf = getActiveWorkflow();
         if (data.tree && wf) {
           wf.tree = data.tree;
-          updateParentRefs(wf.tree, null);
-          selectedNodeId = wf.tree.children.length ? wf.tree.children[0].id : null;
+          var importedMainNode = ensureMainNode(wf);
+          selectedNodeId = importedMainNode ? importedMainNode.id : null;
         }
         if (data.provider) Object.assign(providerState, data.provider);
         saveState();
@@ -1135,6 +1207,10 @@ function renderWorkspace() {
   const pathEl = document.getElementById('nodePath');
   const titleEl = document.getElementById('nodeTitleDisplay');
   var wf = getActiveWorkflow();
+  var protectedMainNode = ensureMainNode(wf);
+  if (wf && (!selectedNodeId || !findNode(wf.tree, selectedNodeId))) {
+    selectedNodeId = protectedMainNode ? protectedMainNode.id : null;
+  }
   const node = wf && selectedNodeId ? findNode(wf.tree, selectedNodeId) : null;
 
   if (!node) {
@@ -1168,6 +1244,7 @@ function renderWorkspace() {
   const statusClass = node.status || 'pending';
   const execMode = localStorage.getItem('wf_execMode') || 'single';
   const locked = node.locked;
+  const mainProtected = isMainNode(wf, node);
   const dis = locked ? ' disabled' : '';
 
   content.innerHTML =
@@ -1222,7 +1299,7 @@ function renderWorkspace() {
         '<button class="btn btn-sm" id="btnExecuteAll">▶ 全部执行</button>' +
         '<button class="btn btn-sm" id="btnStop" ' + (stopDisabled ? 'disabled style="opacity:.4"' : '') + '>⏹ 停止</button>' +
         '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')">' + (locked ? '🔒 已锁定' : '🔓 锁定') + '</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' disabled title="主节点必须保持锁定"' : '') + '>' + (mainProtected ? '🔒 主节点' : (locked ? '🔒 已锁定' : '🔓 锁定')) + '</button>' +
       '</div>' +
     '</div>' +
     '<div id="execProgress" style="display:none;margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)">' +
@@ -1333,13 +1410,8 @@ function renderTree() {
   var wf = getActiveWorkflow();
   if (!container) { console.error('treeContainer not found!'); return; }
   if (!wf) { container.innerHTML = '<div style="color:var(--text2);padding:20px;font-size:12px">暂无数据</div>'; return; }
-  if(!wf.tree){wf.tree=createNode('流程根节点');wf.tree.children=[];wf.tree._parentId=null;}
-  if(!wf.tree.children||wf.tree.children.length===0){
-    var fm=createNode('主任务');fm.locked=true;fm._parentId=wf.tree.id;wf.tree.children=[fm];
-    saveState();
-  }
-  // Render only the first child (主任务) as root of the visible tree, skipping the invisible 流程根节点
-  var topNode = wf.tree.children[0];
+  var topNode = ensureMainNode(wf);
+  // Render only the protected main node as root of the visible tree, skipping the invisible 流程根节点
   if(topNode){
     container.innerHTML = '<div class="tree"><ul>' + renderNode(topNode, 0) + '</ul></div>';
   } else {
@@ -1410,14 +1482,9 @@ function switchWorkflow(id){
   selectedNodeId = null;
   var wf = getActiveWorkflow();
   if(wf){
-    if(!wf.tree||!wf.tree.children||wf.tree.children.length===0){
-      wf.tree=wf.tree||createNode('流程根节点');
-      wf.tree.children=wf.tree.children||[];
-      var mn2=createNode('主任务');mn2.locked=true;wf.tree.children.push(mn2);
-    }
-    wf.tree.children[0].locked=true;
+    var mainNode = ensureMainNode(wf);
     if(!selectedNodeId||!findNode(wf.tree,selectedNodeId)){
-      selectedNodeId=wf.tree.children[0]?wf.tree.children[0].id:null;
+      selectedNodeId=mainNode?mainNode.id:null;
     }
   }
   renderWorkflowList();
@@ -1447,7 +1514,7 @@ function newWorkflow(){
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  var mainNode=createNode('主任务');mainNode.locked=true;mainNode._parentId=wf.tree.id;
+  var mainNode=createNode('主任务');mainNode.locked=true;mainNode._isMainNode=true;mainNode._parentId=wf.tree.id;
   wf.tree.children.push(mainNode);
   workflows.push(wf);
   activeWorkflowId = wf.id;
@@ -1467,6 +1534,7 @@ function updateWfNameInput(){
 // ── Persistence ──
 function saveState() {
   try {
+    workflows.forEach(function(wf) { ensureMainNode(wf); });
     localStorage.setItem('wf_list', JSON.stringify(workflows));
     localStorage.setItem('wf_active', activeWorkflowId || '');
     localStorage.setItem('wf_provider', JSON.stringify(providerState));
@@ -1480,16 +1548,8 @@ function loadState() {
     const list = localStorage.getItem('wf_list');
     if (list) {
       workflows = JSON.parse(list);
-      workflows.forEach(function(wf) {
-        if(!wf.tree){wf.tree=createNode('流程根节点');}
-        if(!wf.tree.children){wf.tree.children=[];}
-        updateParentRefs(wf.tree, null);
-        if(wf.tree.children.length===0){
-          var mn=createNode('主任务');mn.locked=true;mn._parentId=wf.tree.id;wf.tree.children.push(mn);
-        }else{
-          wf.tree.children[0].locked=true;
-        }
-      });
+      if (!Array.isArray(workflows)) workflows = [];
+      workflows.forEach(function(wf) { ensureMainNode(wf); });
     }
 
     if (workflows.length === 0) {
@@ -1500,7 +1560,7 @@ function loadState() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      var mn3=createNode('主任务');mn3.locked=true;mn3._parentId=wf.tree.id;wf.tree.children.push(mn3);
+      var mn3=createNode('主任务');mn3.locked=true;mn3._isMainNode=true;mn3._parentId=wf.tree.id;wf.tree.children.push(mn3);
       workflows.push(wf);
     }
 
@@ -1523,7 +1583,8 @@ function loadState() {
     selectedNodeId = localStorage.getItem('wf_selected') || null;
     var wf = getActiveWorkflow();
     if (wf && (!selectedNodeId || !findNode(wf.tree, selectedNodeId))) {
-      selectedNodeId = wf.tree.children.length ? wf.tree.children[0].id : null;
+      var loadedMainNode = ensureMainNode(wf);
+      selectedNodeId = loadedMainNode ? loadedMainNode.id : null;
     }
   } catch(e) {
     var wf = {
@@ -1533,7 +1594,7 @@ function loadState() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    var mn4=createNode('主任务');mn4.locked=true;wf.tree.children.push(mn4);
+    var mn4=createNode('主任务');mn4.locked=true;mn4._isMainNode=true;mn4._parentId=wf.tree.id;wf.tree.children.push(mn4);
     workflows = [wf];
     activeWorkflowId = wf.id;
     selectedNodeId = wf.tree.children[0].id;
@@ -1643,9 +1704,10 @@ document.getElementById('treeButtons').addEventListener('click', function(e) {
       if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
       var wf = getActiveWorkflow();
       if (wf && selectedNodeId === wf.tree.id) { showToast('不能删除根节点', 'warning'); return; }
+      if (wf) ensureMainNode(wf);
+      if (wf && isMainNode(wf, selectedNodeId)) { showToast('主节点是流程锚点，不能删除', 'warning'); return; }
       var delNode = wf ? findNode(wf.tree, selectedNodeId) : null;
       if (delNode && delNode.locked) { showToast('锁定节点不能删除', 'warning'); return; }
-      if (wf && wf.tree.children[0] && selectedNodeId === wf.tree.children[0].id && wf.tree.children.length <= 1) { showToast('至少保留一个主节点', 'warning'); return; }
       deleteNode(selectedNodeId);
   } else if (action === 'copyNode') {
     if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
