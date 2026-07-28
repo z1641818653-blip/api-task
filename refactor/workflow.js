@@ -941,7 +941,7 @@ function updateProgress(current, total, label) {
   var textEl = document.getElementById('execProgressText');
   var barEl = document.getElementById('execProgressBar');
   if (!progress || !textEl || !barEl) return;
-  progress.style.display = isRunning ? 'block' : 'none';
+  progress.hidden = !isRunning;
   if (current >= total && total > 0) {
     textEl.textContent = '全部完成 (' + total + '/' + total + ')';
   } else if (label) {
@@ -1066,17 +1066,11 @@ function renderSettings() {
       '<label class="form-label">API Key</label>' +
       '<input class="form-input" id="inpApiKey" type="password" value="' + esc(p.apiKey) + '">' +
     '</div>' +
-    '<div class="form-group">' +
-      '<div class="btn-group" style="margin-top:4px">' +
-        '<button class="btn btn-sm w-full" id="btnExport">📤 导出流程</button>' +
-      '</div>' +
+    '<div class="settings-actions">' +
+      '<button class="btn btn-sm" id="btnExport">📤 导出流程</button>' +
+      '<button class="btn btn-sm" id="btnImport">📥 导入流程</button>' +
     '</div>' +
-    '<div class="form-group">' +
-      '<div class="btn-group">' +
-        '<button class="btn btn-sm w-full" id="btnImport">📥 导入流程</button>' +
-      '</div>' +
-    '</div>' +
-    '<input type="file" id="importInput" accept=".json" style="display:none">';
+    '<input class="visually-hidden" type="file" id="importInput" accept=".json">';
 
   document.getElementById('selModel').addEventListener('change', function() {
     providerState.model = this.value;
@@ -1207,70 +1201,75 @@ function renderWorkspace() {
           '<option value="inherit"' + (node.inputType === 'inherit' ? ' selected' : '') + '>继承上级</option>' +
         '</select>' +
       '</div>' +
-      '<div class="form-group" id="inputSourceGroup" style="' + (node.inputType === 'manual' ? '' : 'display:none') + '">' +
+      '<div class="form-group" id="inputSourceGroup"' + (node.inputType === 'manual' ? '' : ' hidden') + '>' +
         '<label class="form-label">手动输入</label>' +
         '<textarea class="form-textarea" id="inpManualInput" rows="2" placeholder="输入内容将前置到 prompt"' + dis + '>' + esc(node.manualInput) + '</textarea>' +
       '</div>' +
-      '<div class="form-group" id="inheritGroup" style="' + (node.inputType === 'inherit' ? '' : 'display:none') + '">' +
+      '<div class="form-group" id="inheritGroup"' + (node.inputType === 'inherit' ? '' : ' hidden') + '>' +
         '<label class="form-label">继承自</label>' +
         '<select class="form-select" id="selInheritFrom"' + dis + '>' + inheritOpts + '</select>' +
       '</div>';
   }
 
   content.innerHTML =
-    (locked ? '<div class="form-group"><span class="status-badge">🔒 已锁定</span></div>' : '') +
-    '<div class="form-group">' +
-      '<label class="form-label">标题</label>' +
-      '<input class="form-input" id="inpTitle" value="' + esc(node.title) + '"' + dis + '>' +
-    '</div>' +
-    inputSourceHtml +
-    '<div class="form-group">' +
-      '<label class="form-label">Prompt</label>' +
-      '<textarea class="form-textarea mono" id="inpPrompt" rows="3" style="font-size:11px"' + dis + '>' + esc(node.prompt) + '</textarea>' +
-    '</div>' +
-    '<div class="form-row">' +
-      '<div class="form-group" style="flex:0 0 auto">' +
-        '<label class="form-label">Max Tokens</label>' +
-        '<input class="form-input number" id="inpMaxTokens" type="number" value="' + node.maxTokens + '" min="1" max="32000"' + dis + '>' +
+    '<section class="editor-card editor-primary-card">' +
+      (locked ? '<div class="editor-card-notice"><span class="status-badge">🔒 已锁定，内容只读</span></div>' : '') +
+      '<div class="form-group">' +
+        '<label class="form-label">标题</label>' +
+        '<input class="form-input" id="inpTitle" value="' + esc(node.title) + '"' + dis + '>' +
       '</div>' +
-      '<div class="form-group" style="flex:0 0 auto">' +
-        '<label class="form-label">Temperature</label>' +
-        '<input class="form-input number" id="inpTemperature" type="number" value="' + node.temperature + '" min="0" max="2" step="0.1"' + dis + '>' +
+      inputSourceHtml +
+      '<div class="form-group form-group-last">' +
+        '<label class="form-label">Prompt</label>' +
+        '<textarea class="form-textarea mono prompt-input" id="inpPrompt" rows="4"' + dis + '>' + esc(node.prompt) + '</textarea>' +
       '</div>' +
-      '<div class="form-group" style="flex:1;min-width:0">' +
-        '<label class="form-label">颜色标签</label>' +
-        colorHtml +
+    '</section>' +
+    '<section class="editor-card editor-options-card">' +
+      '<div class="editor-section-title">生成参数与分类</div>' +
+      '<div class="parameter-grid">' +
+        '<div class="form-group form-group-last parameter-field">' +
+          '<label class="form-label">Max Tokens</label>' +
+          '<input class="form-input number" id="inpMaxTokens" type="number" value="' + node.maxTokens + '" min="1" max="32000"' + dis + '>' +
+        '</div>' +
+        '<div class="form-group form-group-last parameter-field">' +
+          '<label class="form-label">Temperature</label>' +
+          '<input class="form-input number" id="inpTemperature" type="number" value="' + node.temperature + '" min="0" max="2" step="0.1"' + dis + '>' +
+        '</div>' +
+        '<div class="form-group form-group-last color-field">' +
+          '<label class="form-label">颜色标签</label>' +
+          colorHtml +
+        '</div>' +
       '</div>' +
-    '</div>' +
-    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
-      '<label style="font-size:11px;color:var(--text2)">模式:</label>' +
-      '<select id="execMode" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);outline:none"' + dis + '>' +
-        '<option value="single"' + (execMode==='single'?' selected':'') + '>仅当前节点</option>' +
-        '<option value="dependencies"' + (execMode==='dependencies'?' selected':'') + '>依赖链（上级→当前）</option>' +
-      '</select>' +
-    '</div>' +
-    '<div class="form-group">' +
-      '<div class="btn-group">' +
+    '</section>' +
+    '<section class="execution-panel">' +
+      '<div class="execution-toolbar">' +
+        '<div class="execution-mode-group">' +
+          '<label class="form-label" for="execMode">执行模式</label>' +
+          '<select class="form-select execution-mode-select" id="execMode"' + dis + '>' +
+            '<option value="single"' + (execMode==='single'?' selected':'') + '>仅当前节点</option>' +
+            '<option value="dependencies"' + (execMode==='dependencies'?' selected':'') + '>依赖链（上级→当前）</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="execution-meta">' +
+          '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
+          '<button class="btn btn-sm btn-outline lock-button" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' title="主节点不可删除；锁定仅用于防止误修改"' : '') + '>' + (locked ? '🔒 已锁定' : '🔓 锁定') + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="execution-actions">' +
         '<button class="btn btn-primary btn-sm" id="btnExecute">▶ 执行当前模式</button>' +
         '<button class="btn btn-sm" id="btnExecuteAll">▶ 运行整个流程树</button>' +
-        '<button class="btn btn-sm" id="btnStop" ' + (stopDisabled ? 'disabled style="opacity:.4"' : '') + '>⏹ 停止</button>' +
-        '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' title="主节点不可删除；锁定仅用于防止误修改"' : '') + '>' + (locked ? '🔒 已锁定' : '🔓 锁定') + '</button>' +
+        '<button class="btn btn-sm btn-stop" id="btnStop"' + (stopDisabled ? ' disabled' : '') + '>⏹ 停止</button>' +
       '</div>' +
+    '</section>' +
+    '<div class="exec-progress" id="execProgress" hidden>' +
+      '<div class="exec-progress-text" id="execProgressText">准备中...</div>' +
+      '<div class="exec-progress-track"><div class="exec-progress-bar" id="execProgressBar"></div></div>' +
     '</div>' +
-    '<div id="execProgress" style="display:none;margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)">' +
-      '<div style="font-size:11px;font-weight:600;color:var(--text)" id="execProgressText">准备中...</div>' +
-      '<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
-        '<div id="execProgressBar" style="height:100%;width:0%;background:var(--primary);transition:width .3s"></div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="form-group">' +
-      '<div class="error-msg' + (node.error ? ' show' : '') + '" id="errorMsg">' + esc(node.error || '') + '</div>' +
-    '</div>' +
-    '<div class="output-area" style="flex:1;min-height:60px;display:flex;flex-direction:column">' +
-      '<label class="form-label">输出</label>' +
-      '<textarea class="form-textarea mono" id="nodeOutput" readonly rows="6" style="flex:1;resize:none;font-size:11px">' + esc(node.output || '') + '</textarea>' +
-    '</div>';
+    '<div class="error-msg' + (node.error ? ' show' : '') + '" id="errorMsg">' + esc(node.error || '') + '</div>' +
+    '<section class="editor-card output-area">' +
+      '<div class="editor-section-title">输出</div>' +
+      '<textarea class="form-textarea mono output-textarea" id="nodeOutput" readonly rows="6">' + esc(node.output || '') + '</textarea>' +
+    '</section>';
 
   document.getElementById('inpTitle').addEventListener('change', function() {
     node.title = this.value;
@@ -1284,8 +1283,8 @@ function renderWorkspace() {
     markNodeExecutionStale(node);
     const manualGroup = document.getElementById('inputSourceGroup');
     const inheritGroup = document.getElementById('inheritGroup');
-    if (manualGroup) manualGroup.style.display = this.value === 'manual' ? '' : 'none';
-    if (inheritGroup) inheritGroup.style.display = this.value === 'inherit' ? '' : 'none';
+    if (manualGroup) manualGroup.hidden = this.value !== 'manual';
+    if (inheritGroup) inheritGroup.hidden = this.value !== 'inherit';
     saveState();
     renderTree();
   });
@@ -1389,15 +1388,15 @@ function renderTree() {
   const container = document.getElementById('treeContainer');
   var wf = getActiveWorkflow();
   if (!container) { console.error('treeContainer not found!'); return; }
-  if (!wf) { container.innerHTML = '<div style="color:var(--text2);padding:20px;font-size:12px">暂无数据</div>'; return; }
+  if (!wf) { container.innerHTML = '<div class="tree-placeholder">暂无数据</div>'; return; }
   var topNode = ensureMainNode(wf);
   // Render only the protected main node as root of the visible tree, skipping the invisible 流程根节点
   if(topNode){
     container.innerHTML = '<div class="tree"><ul>' + renderNode(topNode, 0) + '</ul></div>';
   } else {
-    container.innerHTML = '<div style="color:var(--text2);padding:20px;font-size:12px">加载中...</div>';
+    container.innerHTML = '<div class="tree-placeholder">加载中...</div>';
   }
-  }catch(e){console.error('renderTree error:',e);var c=document.getElementById('treeContainer');if(c)c.innerHTML='<div style="color:#ff6b9d;padding:20px;font-size:13px">⚠️ 渲染异常: '+e.message+'</div>';}
+  }catch(e){console.error('renderTree error:',e);var c=document.getElementById('treeContainer');if(c)c.innerHTML='<div class="tree-error">⚠️ 渲染异常: '+esc(e.message)+'</div>';}
 }
 
 function renderNode(node, depth) {
@@ -1427,7 +1426,7 @@ function renderNode(node, depth) {
   html += '<span class="node-drag" draggable="' + (movable ? 'true' : 'false') + '" data-id="' + node.id + '" title="' + (movable ? '拖拽移动节点' : '此节点不可移动') + '">⠿</span>';
   html += '<span class="node-num">' + (path ? path + '级' : '') + '</span>';
   html += '<span class="node-title">' + esc(node.title || '新节点') + '</span>';
-  if(node.locked) html += '<span style="font-size:9px;color:var(--text2)">🔒</span>';
+  if(node.locked) html += '<span class="node-lock-indicator" title="节点已锁定">🔒</span>';
   html += '</div>';
   if (node.children && node.children.length > 0) {
     html += '<ul>';
@@ -1535,8 +1534,8 @@ function renderWorkflowList(){
     var active = wf.id === activeWorkflowId ? ' active' : '';
     html += '<div class="wf-item' + active + '" data-id="' + wf.id + '">';
     html += '<span>📄</span>';
-    html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(wf.title) + '</span>';
-    html += '<span style="font-size:10px;color:var(--text2);flex-shrink:0">' + (wf.updatedAt ? wf.updatedAt.slice(0,10) : '') + '</span>';
+    html += '<span class="wf-item-title">' + esc(wf.title) + '</span>';
+    html += '<span class="wf-item-date">' + (wf.updatedAt ? wf.updatedAt.slice(0,10) : '') + '</span>';
     html += '<span class="wf-del" data-id="' + wf.id + '">✕</span>';
     html += '</div>';
   });
@@ -2030,7 +2029,7 @@ document.getElementById('collapseBtnRight').addEventListener('click',function(){
   rh.addEventListener('mousedown',function(e){d=true;sx=e.clientX;sw=pr.offsetWidth;pr.classList.add('dragging');e.preventDefault()});
   document.addEventListener('mousemove',function(e){
     if(!d)return;
-    const w=Math.max(180,Math.min(800,sw+sx-e.clientX));
+    const w=Math.max(320,Math.min(720,sw+sx-e.clientX));
     pr.style.width=w+'px';pr.style.minWidth=w+'px';
     _rightW=w;localStorage.setItem('layout_right_w',w);
     updateBtnPos();
@@ -2087,8 +2086,8 @@ document.getElementById('wfListContainer').addEventListener('click', function(e)
 });
 
 // ── Init ──
-_leftW=parseInt(localStorage.getItem('layout_left_w'))||260;
-_rightW=parseInt(localStorage.getItem('layout_right_w'))||380;
+_leftW=Math.max(220,Math.min(340,parseInt(localStorage.getItem('layout_left_w'))||260));
+_rightW=Math.max(320,Math.min(720,parseInt(localStorage.getItem('layout_right_w'))||380));
 document.getElementById('panelLeft').style.width=_leftW+'px';document.getElementById('panelLeft').style.minWidth=_leftW+'px';
 document.getElementById('panelRight').style.width=_rightW+'px';document.getElementById('panelRight').style.minWidth=_rightW+'px';
 
