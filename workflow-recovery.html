@@ -96,6 +96,20 @@ body{
   border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px
 }
 .panel-right .body{flex:1;overflow-x:auto;overflow-y:auto;padding:12px 8px;min-height:0;display:flex;flex-direction:column;align-items:center}
+.flow-help{position:relative;width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);color:var(--primary);background:var(--surface2);font-size:11px;font-weight:800;cursor:help;outline:none}
+.flow-help:hover,.flow-help:focus{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 14%,transparent)}
+.flow-help-tooltip{position:absolute;top:26px;right:-8px;width:244px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:11px;font-weight:500;line-height:1.45;color:var(--text);opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .15s,transform .15s,visibility .15s;z-index:500}
+.flow-help:hover .flow-help-tooltip,.flow-help:focus .flow-help-tooltip{opacity:1;visibility:visible;transform:translateY(0)}
+.flow-help-title{font-weight:800;margin-bottom:6px}
+.flow-help-row{display:flex;align-items:flex-start;gap:7px;margin:4px 0}
+.flow-help-swatch{width:12px;height:12px;border-radius:4px;flex:0 0 12px;margin-top:2px;border:1px solid rgba(0,0,0,.08)}
+.flow-help-swatch.red{background:#dc2626}.flow-help-swatch.blue{background:#2563eb}
+.flow-help-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;margin:3px 2px 0}
+.flow-help-dot.gray{background:#94a3b8}.flow-help-dot.yellow{background:#f59e0b}.flow-help-dot.green{background:#10b981}.flow-help-dot.orange{background:#f97316}
+.tree-version-bar{padding:7px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px;background:var(--surface2);flex-shrink:0}
+.tree-version-bar .btn{flex:1;justify-content:center}
+.tree-version-note{font-size:9px;color:var(--text2);white-space:nowrap}
+#btnRollbackVersion:disabled{opacity:.45;cursor:not-allowed}
 
 /* RESIZE HANDLE */
 .resize-handle{
@@ -420,7 +434,25 @@ body{
   <!-- RIGHT -->
   <aside class="panel-right" id="panelRight">
     <div class="resize-handle" id="resizeHandle"></div>
-    <div class="header">🌳 流程控制</div>
+    <div class="header">
+      <span>🌳 流程控制</span>
+      <span class="flow-help" tabindex="0" aria-label="查看节点颜色说明">?
+        <span class="flow-help-tooltip" role="tooltip">
+          <span class="flow-help-title">节点颜色与状态</span>
+          <span class="flow-help-row"><span class="flow-help-swatch red"></span><span>红色节点：输入缺失、执行错误或依赖阻塞</span></span>
+          <span class="flow-help-row"><span class="flow-help-swatch blue"></span><span>蓝色节点：输入有效，但 Prompt 为空</span></span>
+          <span class="flow-help-row"><span class="flow-help-dot gray"></span><span>灰点：待执行</span></span>
+          <span class="flow-help-row"><span class="flow-help-dot yellow"></span><span>黄点：正在执行</span></span>
+          <span class="flow-help-row"><span class="flow-help-dot green"></span><span>绿点：执行完成</span></span>
+          <span class="flow-help-row"><span class="flow-help-dot orange"></span><span>橙色状态：手动停止</span></span>
+          <span style="display:block;margin-top:6px;color:var(--text2)">顶部自定义颜色标签仅用于分类，不代表运行状态。</span>
+        </span>
+      </span>
+    </div>
+    <div class="tree-version-bar">
+      <button class="btn btn-sm" id="btnRollbackVersion" disabled>↶ 回退版本 <span id="versionHistoryCount">0/5</span></button>
+      <span class="tree-version-note">结构与内容</span>
+    </div>
     <div class="body" id="treeBody"><div id="treeContainer"></div></div>
     <div class="tree-buttons" id="treeButtons">
       <button class="btn btn-sm btn-primary" style="flex-basis:100%" data-action="executeTree">▶ 运行整个流程树</button>
@@ -457,6 +489,12 @@ let abortController = null;
 let isRunning = false;
 let runQueue = [];
 let runIndex = 0;
+const WORKFLOW_HISTORY_KEY = 'wf_history_v1';
+const MAX_WORKFLOW_HISTORY = 5;
+let workflowVersionHistory = {};
+let workflowVersionBaselines = {};
+let versionHistoryInitialized = false;
+let isRestoringWorkflowVersion = false;
 const DEEPSEEK_MODELS = [
   { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash（快速测试）' },
   { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro（高质量）' }
@@ -1447,6 +1485,7 @@ function renderAll() {
   renderTree();
   updateWfNameInput();
   updateTreeActionButtons();
+  updateVersionControls();
 }
 
 function updateTreeActionButtons() {
@@ -2005,6 +2044,178 @@ function updateWfNameInput(){
   if(inp && wf && inp !== document.activeElement) inp.value = wf.title;
 }
 
+// ── Workflow version history ──
+function cloneEditableNodeForVersion(node) {
+  var snapshot = {};
+  Object.keys(node || {}).forEach(function(key) {
+    if (key === 'children' || key === 'output' || key === 'status' || key === 'error' ||
+        key === '_parentId' || key === '_collapsed') return;
+    var value = node[key];
+    if (typeof value === 'undefined' || typeof value === 'function') return;
+    snapshot[key] = value && typeof value === 'object'
+      ? JSON.parse(JSON.stringify(value))
+      : value;
+  });
+  snapshot.children = (node && Array.isArray(node.children) ? node.children : []).map(function(child) {
+    return cloneEditableNodeForVersion(child);
+  });
+  return snapshot;
+}
+
+function createWorkflowVersionEntry(wf) {
+  return {
+    savedAt: new Date().toISOString(),
+    title: wf && typeof wf.title === 'string' ? wf.title : '未命名流程',
+    tree: cloneEditableNodeForVersion(wf ? wf.tree : null)
+  };
+}
+
+function getWorkflowVersionFingerprint(entry) {
+  return JSON.stringify({
+    title: entry ? entry.title : '',
+    tree: entry ? entry.tree : null
+  });
+}
+
+function loadWorkflowVersionHistory() {
+  var parsed = parseStoredJson(
+    localStorage.getItem(WORKFLOW_HISTORY_KEY),
+    {},
+    '流程版本历史',
+    'wf_history_corrupt_backup'
+  );
+  workflowVersionHistory = {};
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    Object.keys(parsed).forEach(function(workflowId) {
+      if (!Array.isArray(parsed[workflowId])) return;
+      workflowVersionHistory[workflowId] = parsed[workflowId].filter(function(entry) {
+        return entry && typeof entry === 'object' && entry.tree && typeof entry.tree === 'object';
+      }).slice(-MAX_WORKFLOW_HISTORY);
+    });
+  }
+}
+
+function saveWorkflowVersionHistory() {
+  localStorage.setItem(WORKFLOW_HISTORY_KEY, JSON.stringify(workflowVersionHistory));
+}
+
+function initializeWorkflowVersionBaselines() {
+  workflowVersionBaselines = {};
+  workflows.forEach(function(wf) {
+    var entry = createWorkflowVersionEntry(wf);
+    workflowVersionBaselines[wf.id] = {
+      fingerprint: getWorkflowVersionFingerprint(entry),
+      entry: entry
+    };
+  });
+  versionHistoryInitialized = true;
+}
+
+function trackWorkflowVersionChanges() {
+  if (!versionHistoryInitialized) {
+    initializeWorkflowVersionBaselines();
+    return;
+  }
+  var currentIds = {};
+  var historyChanged = false;
+  workflows.forEach(function(wf) {
+    currentIds[wf.id] = true;
+    var entry = createWorkflowVersionEntry(wf);
+    var fingerprint = getWorkflowVersionFingerprint(entry);
+    var baseline = workflowVersionBaselines[wf.id];
+    if (!baseline || isRestoringWorkflowVersion) {
+      workflowVersionBaselines[wf.id] = { fingerprint: fingerprint, entry: entry };
+      return;
+    }
+    if (baseline.fingerprint !== fingerprint) {
+      var history = workflowVersionHistory[wf.id] || [];
+      history.push(baseline.entry);
+      workflowVersionHistory[wf.id] = history.slice(-MAX_WORKFLOW_HISTORY);
+      workflowVersionBaselines[wf.id] = { fingerprint: fingerprint, entry: entry };
+      historyChanged = true;
+    }
+  });
+  Object.keys(workflowVersionBaselines).forEach(function(workflowId) {
+    if (!currentIds[workflowId]) delete workflowVersionBaselines[workflowId];
+  });
+  Object.keys(workflowVersionHistory).forEach(function(workflowId) {
+    if (!currentIds[workflowId]) {
+      delete workflowVersionHistory[workflowId];
+      historyChanged = true;
+    }
+  });
+  if (historyChanged) saveWorkflowVersionHistory();
+}
+
+function updateVersionControls() {
+  var button = document.getElementById('btnRollbackVersion');
+  var countEl = document.getElementById('versionHistoryCount');
+  if (!button || !countEl) return;
+  var history = activeWorkflowId && workflowVersionHistory[activeWorkflowId]
+    ? workflowVersionHistory[activeWorkflowId]
+    : [];
+  var count = Math.min(history.length, MAX_WORKFLOW_HISTORY);
+  countEl.textContent = count + '/' + MAX_WORKFLOW_HISTORY;
+  button.disabled = isRunning || count === 0;
+  if (isRunning) {
+    button.title = '流程执行期间不能回退版本';
+  } else if (count === 0) {
+    button.title = '修改流程后会自动保留最近 5 个版本';
+  } else {
+    var latest = history[history.length - 1];
+    button.title = '回退到 ' + new Date(latest.savedAt).toLocaleString();
+  }
+}
+
+function restoreLatestWorkflowVersion() {
+  if (isRunning) {
+    showToast('流程执行期间不能回退版本', 'warning');
+    return;
+  }
+  var wf = getActiveWorkflow();
+  var history = wf && workflowVersionHistory[wf.id] ? workflowVersionHistory[wf.id] : [];
+  if (!wf || !history.length) {
+    showToast('当前流程没有可回退的版本', 'info');
+    return;
+  }
+  var target = history[history.length - 1];
+  var targetTime = new Date(target.savedAt).toLocaleString();
+  showConfirm('回退到 ' + targetTime + ' 的版本吗？当前结构和内容会被替换，执行结果将重置。', function() {
+    var previousSelectedId = selectedNodeId;
+    history.pop();
+    workflowVersionHistory[wf.id] = history;
+    isRestoringWorkflowVersion = true;
+    try {
+      wf.title = typeof target.title === 'string' ? target.title : wf.title;
+      wf.tree = normalizeNodeData(
+        JSON.parse(JSON.stringify(target.tree)),
+        null,
+        new Set(),
+        { count: 0 }
+      );
+      ensureMainNode(wf);
+      repairInternalRootReferences(wf);
+      wf.updatedAt = new Date().toISOString();
+      selectedNodeId = previousSelectedId && findNode(wf.tree, previousSelectedId)
+        ? previousSelectedId
+        : ensureMainNode(wf).id;
+      var restoredEntry = createWorkflowVersionEntry(wf);
+      workflowVersionBaselines[wf.id] = {
+        fingerprint: getWorkflowVersionFingerprint(restoredEntry),
+        entry: restoredEntry
+      };
+      saveWorkflowVersionHistory();
+      saveState();
+    } finally {
+      isRestoringWorkflowVersion = false;
+    }
+    renderWorkflowList();
+    renderAll();
+    updateWfNameInput();
+    showToast('已回退到上一版本', 'success');
+  });
+}
+
 // ── Persistence ──
 function saveState() {
   try {
@@ -2012,6 +2223,7 @@ function saveState() {
     if (activeWorkflowId && !workflows.some(function(wf) { return wf.id === activeWorkflowId; })) {
       activeWorkflowId = workflows.length ? workflows[0].id : null;
     }
+    trackWorkflowVersionChanges();
     var activeWf = getActiveWorkflow();
     if (activeWf && (!selectedNodeId || selectedNodeId === activeWf.tree.id || !findNode(activeWf.tree, selectedNodeId))) {
       var fallbackMain = ensureMainNode(activeWf);
@@ -2026,6 +2238,7 @@ function saveState() {
     }));
     if (selectedNodeId) localStorage.setItem('wf_selected', selectedNodeId);
     else localStorage.removeItem('wf_selected');
+    updateVersionControls();
     return true;
   } catch(e) {
     console.error('保存流程失败:', e);
@@ -2036,6 +2249,7 @@ function saveState() {
 
 function loadState() {
   try {
+    loadWorkflowVersionHistory();
     const list = localStorage.getItem('wf_list');
     workflows = normalizeWorkflowList(parseStoredJson(list, [], '流程数据', 'wf_list_corrupt_backup'));
 
@@ -2078,6 +2292,7 @@ function loadState() {
       var loadedMainNode = ensureMainNode(activeWf);
       selectedNodeId = loadedMainNode ? loadedMainNode.id : null;
     }
+    initializeWorkflowVersionBaselines();
     saveState();
   } catch(e) {
     console.error('加载流程失败:', e);
@@ -2092,6 +2307,8 @@ function loadState() {
     workflows = [normalizeWorkflowData(wf, 0)];
     activeWorkflowId = wf.id;
     selectedNodeId = wf.tree.children[0].id;
+    loadWorkflowVersionHistory();
+    initializeWorkflowVersionBaselines();
     saveState();
   }
 }
@@ -2131,6 +2348,10 @@ function updateBtnPos(){
 })();
 // ── Workflow name ──
 document.getElementById('wfNameInput').addEventListener('input', function(){
+  var wf = getActiveWorkflow();
+  if(wf){wf.title = this.value; wf.updatedAt = new Date().toISOString(); renderWorkflowList();}
+});
+document.getElementById('wfNameInput').addEventListener('change', function(){
   var wf = getActiveWorkflow();
   if(wf){wf.title = this.value; wf.updatedAt = new Date().toISOString(); saveState(); renderWorkflowList();}
 });
@@ -2234,6 +2455,8 @@ loadState();
 renderWorkflowList();
 var btnWf=document.getElementById('btnNewWorkflow');
 if(btnWf)btnWf.addEventListener('click',newWorkflow);
+var btnRollbackVersion=document.getElementById('btnRollbackVersion');
+if(btnRollbackVersion)btnRollbackVersion.addEventListener('click',restoreLatestWorkflowVersion);
 updateBtnPos();
 try{renderAll();}catch(e){console.error('renderAll',e);}
 window.addEventListener('resize',updateBtnPos);
