@@ -1707,18 +1707,31 @@ function renderWorkspace() {
     if (manualGroup) manualGroup.style.display = this.value === 'manual' ? '' : 'none';
     if (inheritGroup) inheritGroup.style.display = this.value === 'inherit' ? '' : 'none';
     saveState();
+    renderTree();
   });
   var manualInput = document.getElementById('inpManualInput');
-  if (manualInput) manualInput.addEventListener('change', function() {
-    node.manualInput = this.value;
-    saveState();
-  });
+  if (manualInput) {
+    manualInput.addEventListener('input', function() {
+      node.manualInput = this.value;
+      renderTree();
+    });
+    manualInput.addEventListener('change', function() {
+      node.manualInput = this.value;
+      saveState();
+    });
+  }
   var inheritSelect = document.getElementById('selInheritFrom');
   if (inheritSelect) inheritSelect.addEventListener('change', function() {
     node.inheritFrom = this.value || null;
     saveState();
+    renderTree();
   });
-  document.getElementById('inpPrompt').addEventListener('change', function() {
+  var promptInput = document.getElementById('inpPrompt');
+  promptInput.addEventListener('input', function() {
+    node.prompt = this.value;
+    renderTree();
+  });
+  promptInput.addEventListener('change', function() {
     node.prompt = this.value;
     saveState();
   });
