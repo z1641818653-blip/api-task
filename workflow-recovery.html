@@ -155,20 +155,26 @@ body{
 .btn-group{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 
 /* COLOR PICKER */
-.color-picker{display:flex;gap:4px;flex-wrap:wrap}
+.color-picker{display:flex;gap:6px;flex-wrap:wrap;padding:2px}
 .color-btn{
-  width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
-  cursor:pointer;transition:all var(--transition);position:relative;flex-shrink:0
+  width:24px;height:24px;border-radius:7px;border:2px solid rgba(255,255,255,.8);
+  cursor:pointer;transition:transform var(--transition),box-shadow var(--transition);position:relative;flex-shrink:0;
+  box-shadow:0 0 0 1px var(--border)
 }
-.color-btn:hover{transform:scale(1.15)}
-.color-btn.active{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary)}
-.color-btn.none{background:var(--surface2);border-style:dashed}
-.color-btn.red{background:#e74c3c}
-.color-btn.orange{background:#e67e22}
-.color-btn.yellow{background:#f1c40f}
-.color-btn.green{background:#2ecc71}
-.color-btn.blue{background:#3498db}
-.color-btn.purple{background:#9b59b6}
+.color-btn:hover{transform:scale(1.12)}
+.color-btn.active{transform:scale(1.08);box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--primary)}
+.color-btn.none{background:linear-gradient(135deg,var(--surface2) 43%,var(--danger) 45%,var(--danger) 55%,var(--surface2) 57%)}
+.color-btn.red{background:#ef4444}
+.color-btn.orange{background:#f97316}
+.color-btn.yellow{background:#eab308}
+.color-btn.green{background:#22c55e}
+.color-btn.teal{background:#14b8a6}
+.color-btn.cyan{background:#06b6d4}
+.color-btn.blue{background:#3b82f6}
+.color-btn.indigo{background:#6366f1}
+.color-btn.purple{background:#8b5cf6}
+.color-btn.pink{background:#ec4899}
+.color-btn.gray{background:#64748b}
 
 /* STATUS BADGE */
 .status-badge{
@@ -199,12 +205,24 @@ body{
 .t-node{background:var(--surface);border:2px solid var(--border);border-radius:8px;padding:2px 6px;cursor:pointer;text-align:center;min-width:40px;max-width:90px;transition:all .15s;position:relative;display:flex;align-items:center;gap:2px;font-size:10px;flex-shrink:0}
 .t-node:hover{border-color:var(--primary)}
 .t-node.selected{border-color:var(--primary);background:rgba(109,63,192,0.06)}
-.t-node.color-red{border-left:4px solid #ef4444}
-.t-node.color-orange{border-left:4px solid #f97316}
-.t-node.color-yellow{border-left:4px solid #eab308}
-.t-node.color-green{border-left:4px solid #22c55e}
-.t-node.color-blue{border-left:4px solid #3b82f6}
-.t-node.color-purple{border-left:4px solid #8b5cf6}
+.t-node.color-red{--node-color:#ef4444;--node-tint:rgba(239,68,68,.16)}
+.t-node.color-orange{--node-color:#f97316;--node-tint:rgba(249,115,22,.16)}
+.t-node.color-yellow{--node-color:#eab308;--node-tint:rgba(234,179,8,.18)}
+.t-node.color-green{--node-color:#22c55e;--node-tint:rgba(34,197,94,.16)}
+.t-node.color-teal{--node-color:#14b8a6;--node-tint:rgba(20,184,166,.16)}
+.t-node.color-cyan{--node-color:#06b6d4;--node-tint:rgba(6,182,212,.16)}
+.t-node.color-blue{--node-color:#3b82f6;--node-tint:rgba(59,130,246,.16)}
+.t-node.color-indigo{--node-color:#6366f1;--node-tint:rgba(99,102,241,.16)}
+.t-node.color-purple{--node-color:#8b5cf6;--node-tint:rgba(139,92,246,.16)}
+.t-node.color-pink{--node-color:#ec4899;--node-tint:rgba(236,72,153,.16)}
+.t-node.color-gray{--node-color:#64748b;--node-tint:rgba(100,116,139,.16)}
+.t-node[class*="color-"]{
+  border-color:var(--node-color);
+  background:linear-gradient(var(--node-tint),var(--node-tint)),var(--surface);
+  box-shadow:inset 4px 0 0 var(--node-color)
+}
+.t-node.selected[class*="color-"]{outline:2px solid var(--primary);outline-offset:1px}
+.t-node.locked[class*="color-"]{background:linear-gradient(var(--node-tint),var(--node-tint)),var(--surface2)}
 .node-drag{font-size:10px;opacity:.4;cursor:grab;user-select:none;line-height:1}
 .node-drag:hover{opacity:1}
 .node-num{font-size:9px;font-weight:700;color:var(--primary);white-space:nowrap}
@@ -436,6 +454,7 @@ function normalizeWorkflowData(wf, index) {
   if (!wf.tree || typeof wf.tree !== 'object' || Array.isArray(wf.tree)) wf.tree = createNode('流程根节点');
   wf.tree = normalizeNodeData(wf.tree, null, new Set(), { count: 0 });
   ensureMainNode(wf);
+  repairInternalRootReferences(wf);
   return wf;
 }
 
@@ -566,6 +585,18 @@ function isMainNode(wf, nodeOrId) {
   if (!node) return false;
   var mainNode = getMainNode(wf);
   return node._isMainNode === true || !!(mainNode && mainNode.id === node.id);
+}
+
+function repairInternalRootReferences(wf) {
+  if (!wf || !wf.tree) return;
+  (function walk(node) {
+    if (!node) return;
+    if (node !== wf.tree && node.inheritFrom === wf.tree.id) {
+      node.inheritFrom = null;
+      if (node.inputType === 'inherit') node.inputType = 'manual';
+    }
+    (node.children || []).forEach(walk);
+  })(wf.tree);
 }
 
 // ── Tree operations ──
@@ -1374,7 +1405,7 @@ function renderWorkspace() {
   const titleEl = document.getElementById('nodeTitleDisplay');
   var wf = getActiveWorkflow();
   var protectedMainNode = ensureMainNode(wf);
-  if (wf && (!selectedNodeId || !findNode(wf.tree, selectedNodeId))) {
+  if (wf && (!selectedNodeId || selectedNodeId === wf.tree.id || !findNode(wf.tree, selectedNodeId))) {
     selectedNodeId = protectedMainNode ? protectedMainNode.id : null;
   }
   const node = wf && selectedNodeId ? findNode(wf.tree, selectedNodeId) : null;
@@ -1390,15 +1421,17 @@ function renderWorkspace() {
   if (pathEl) pathEl.textContent = '📌 节点 ' + path;
   if (titleEl) titleEl.textContent = node.title || '(未命名)';
 
-  const ancestors = getAncestors(wf.tree, node.id);
+  const ancestors = getAncestors(wf.tree, node.id).filter(function(ancestor) {
+    return ancestor.id !== wf.tree.id;
+  });
   let inheritOpts = '<option value="">— 选择上级 —</option>';
   for (const a of ancestors) {
     const ap = getNodePath(wf.tree, a.id);
     inheritOpts += '<option value="' + a.id + '"' + (node.inheritFrom === a.id ? ' selected' : '') + '>' + ap + ' ' + esc(a.title || '未命名') + '</option>';
   }
 
-  const colorList = ['','red','orange','yellow','green','blue','purple'];
-  const colorLabels = { '':'无', 'red':'红', 'orange':'橙', 'yellow':'黄', 'green':'绿', 'blue':'蓝', 'purple':'紫' };
+  const colorList = ['','red','orange','yellow','green','teal','cyan','blue','indigo','purple','pink','gray'];
+  const colorLabels = { '':'无', 'red':'红', 'orange':'橙', 'yellow':'黄', 'green':'绿', 'teal':'青绿', 'cyan':'青', 'blue':'蓝', 'indigo':'靛蓝', 'purple':'紫', 'pink':'粉', 'gray':'灰' };
   let colorHtml = '<div class="color-picker">';
   for (const c of colorList) {
     colorHtml += '<div class="color-btn ' + (c || 'none') + (node.color === c ? ' active' : '') + '" data-color="' + c + '" title="' + colorLabels[c] + '"></div>';
@@ -1722,7 +1755,7 @@ function saveState() {
       activeWorkflowId = workflows.length ? workflows[0].id : null;
     }
     var activeWf = getActiveWorkflow();
-    if (activeWf && (!selectedNodeId || !findNode(activeWf.tree, selectedNodeId))) {
+    if (activeWf && (!selectedNodeId || selectedNodeId === activeWf.tree.id || !findNode(activeWf.tree, selectedNodeId))) {
       var fallbackMain = ensureMainNode(activeWf);
       selectedNodeId = fallbackMain ? fallbackMain.id : null;
     }
@@ -1778,7 +1811,7 @@ function loadState() {
 
     selectedNodeId = localStorage.getItem('wf_selected') || null;
     var activeWf = getActiveWorkflow();
-    if (activeWf && (!selectedNodeId || !findNode(activeWf.tree, selectedNodeId))) {
+    if (activeWf && (!selectedNodeId || selectedNodeId === activeWf.tree.id || !findNode(activeWf.tree, selectedNodeId))) {
       var loadedMainNode = ensureMainNode(activeWf);
       selectedNodeId = loadedMainNode ? loadedMainNode.id : null;
     }
