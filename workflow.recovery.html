@@ -406,7 +406,8 @@ body{
     <div class="body" id="treeBody"><div id="treeContainer"></div></div>
     <div class="tree-buttons" id="treeButtons">
       <button class="btn btn-sm" data-action="addChild">➕ 添加子节点</button>
-      <button class="btn btn-sm btn-danger" data-action="deleteNode">✕ 删除</button>
+      <button class="btn btn-sm" data-action="deleteCurrent">✂ 仅删当前</button>
+      <button class="btn btn-sm btn-danger" data-action="deleteNode">✕ 删除分支</button>
       <button class="btn btn-sm" data-action="copyNode">📋 复制</button>
       <button class="btn btn-sm" data-action="pasteNode">📥 粘贴</button>
     </div>
@@ -753,21 +754,71 @@ function hasLockedDescendant(node) {
   }
   return false;
 }
-function deleteNode(nodeId) {
+function replaceInheritedNodeReference(node, oldId, newId) {
+  if (!node) return;
+  if (node.inheritFrom === oldId) node.inheritFrom = newId || null;
+  (node.children || []).forEach(function(child) {
+    replaceInheritedNodeReference(child, oldId, newId);
+  });
+}
+
+function deleteCurrentNode(nodeId) {
   var wf = getActiveWorkflow();
   if (!wf) return;
-  const mainNode = ensureMainNode(wf);
   const node = findNode(wf.tree, nodeId);
   if (!node) return;
   if (isMainNode(wf, node)) { showToast('主节点是流程锚点，不能删除', 'warning'); return; }
   if (node.locked) { showToast('锁定节点不能删除', 'warning'); return; }
-  if (hasLockedDescendant(node)) {
-    showConfirm('该节点下存在锁定子节点，确定全部删除吗？', function() {
-      doDeleteNode(nodeId);
-    });
+  const childCount = (node.children || []).length;
+  const message = childCount > 0
+    ? '仅删除当前节点“' + (node.title || '未命名') + '”吗？它的 ' + childCount + ' 个直接子节点将自动提升到上一级。'
+    : '确定删除当前节点“' + (node.title || '未命名') + '”吗？';
+  showConfirm(message, function() {
+    doDeleteCurrentNode(nodeId);
+  });
+}
+
+function doDeleteCurrentNode(nodeId) {
+  var wf = getActiveWorkflow();
+  if (!wf) return;
+  var mainNode = ensureMainNode(wf);
+  const node = findNode(wf.tree, nodeId);
+  if (!node) return;
+  if (isMainNode(wf, node)) {
+    selectedNodeId = mainNode ? mainNode.id : null;
+    showToast('主节点是流程锚点，不能删除', 'warning');
     return;
   }
-  doDeleteNode(nodeId);
+  if (node.locked) { showToast('锁定节点不能删除', 'warning'); return; }
+  const parent = findParent(wf.tree, nodeId);
+  if (!parent) return;
+  const idx = parent.children.findIndex(function(child) { return child.id === nodeId; });
+  if (idx === -1) return;
+  const promotedChildren = (node.children || []).slice();
+  promotedChildren.forEach(function(child) {
+    child._parentId = parent.id;
+    replaceInheritedNodeReference(child, nodeId, parent.id);
+  });
+  parent.children.splice.apply(parent.children, [idx, 1].concat(promotedChildren));
+  selectedNodeId = parent.id;
+  saveState();
+  renderAll();
+  showToast(promotedChildren.length ? '当前节点已删除，子节点已连接到上一级' : '节点已删除', 'success');
+}
+
+function deleteNode(nodeId) {
+  var wf = getActiveWorkflow();
+  if (!wf) return;
+  const node = findNode(wf.tree, nodeId);
+  if (!node) return;
+  if (isMainNode(wf, node)) { showToast('主节点是流程锚点，不能删除', 'warning'); return; }
+  if (node.locked) { showToast('锁定节点不能删除', 'warning'); return; }
+  const totalCount = dfsNodes(node).length;
+  const lockedWarning = hasLockedDescendant(node) ? '其中包含锁定子节点。' : '';
+  showConfirm(
+    '确定删除分支“' + (node.title || '未命名') + '”吗？将删除共 ' + totalCount + ' 个节点。' + lockedWarning,
+    function() { doDeleteNode(nodeId); }
+  );
 }
 function doDeleteNode(nodeId) {
   var wf = getActiveWorkflow();
@@ -782,9 +833,10 @@ function doDeleteNode(nodeId) {
   if (!parent) return;
   const idx = parent.children.findIndex(c => c.id === nodeId);
   if (idx !== -1) parent.children.splice(idx, 1);
-  if (selectedNodeId === nodeId) selectedNodeId = wf.tree.children.length ? wf.tree.children[0].id : null;
+  if (selectedNodeId === nodeId) selectedNodeId = parent.id;
   saveState();
   renderAll();
+  showToast('分支已删除', 'success');
 }
 
 function removeNodeFromParent(root, nodeId) {
@@ -1368,7 +1420,8 @@ function showContextMenu(e, nodeId) {
     '<div class="ctx-item" data-action="ctxPaste" data-id="' + nodeId + '">📥 粘贴到此处</div>' +
     '<div class="ctx-divider"></div>' +
     '<div class="ctx-item" data-action="ctxAdd" data-id="' + nodeId + '">➕ 添加子节点</div>' +
-    '<div class="ctx-item" data-action="ctxDelete" data-id="' + nodeId + '">✕ 删除节点</div>';
+    '<div class="ctx-item" data-action="ctxDeleteCurrent" data-id="' + nodeId + '">✂ 仅删除当前</div>' +
+    '<div class="ctx-item" data-action="ctxDeleteBranch" data-id="' + nodeId + '">✕ 删除整个分支</div>';
   menu.style.display = 'block';
   menu.style.left = Math.min(e.clientX, window.innerWidth - 160) + 'px';
   menu.style.top = Math.min(e.clientY, window.innerHeight - 160) + 'px';
@@ -1388,7 +1441,11 @@ document.getElementById('contextMenu').addEventListener('click', function(e) {
   if (action === 'ctxCopy') { copyNode(nodeId); }
   else if (action === 'ctxPaste') { pasteNode(nodeId); }
   else if (action === 'ctxAdd') { addChild(nodeId); }
-  else if (action === 'ctxDelete') {
+  else if (action === 'ctxDeleteCurrent') {
+    if (ctxNode && ctxNode.locked) { showToast('锁定节点不能删除', 'warning'); }
+    else { deleteCurrentNode(nodeId); }
+  }
+  else if (action === 'ctxDeleteBranch') {
     if (ctxNode && ctxNode.locked) { showToast('锁定节点不能删除', 'warning'); }
     else { deleteNode(nodeId); }
   }
@@ -1405,12 +1462,17 @@ function renderAll() {
 }
 
 function updateTreeActionButtons() {
-  var deleteBtn = document.querySelector('#treeButtons .btn[data-action="deleteNode"]');
-  if (!deleteBtn) return;
+  var deleteBtns = document.querySelectorAll('#treeButtons .btn[data-action="deleteCurrent"],#treeButtons .btn[data-action="deleteNode"]');
+  if (!deleteBtns.length) return;
   var wf = getActiveWorkflow();
-  var mainProtected = !!(wf && selectedNodeId && isMainNode(wf, selectedNodeId));
-  deleteBtn.disabled = mainProtected;
-  deleteBtn.title = mainProtected ? '主节点不可删除' : '';
+  var selectedNode = wf && selectedNodeId ? findNode(wf.tree, selectedNodeId) : null;
+  var deleteBlocked = !!(selectedNode && (isMainNode(wf, selectedNode) || selectedNode.locked));
+  var title = selectedNode && isMainNode(wf, selectedNode) ? '主节点不可删除' :
+              selectedNode && selectedNode.locked ? '锁定节点不能删除' : '';
+  deleteBtns.forEach(function(deleteBtn) {
+    deleteBtn.disabled = deleteBlocked;
+    deleteBtn.title = title;
+  });
 }
 
 function renderSettings() {
@@ -2120,14 +2182,11 @@ document.getElementById('treeButtons').addEventListener('click', function(e) {
     var nid = addChild(selectedNodeId);
     if (nid) selectedNodeId = nid;
     renderAll();
+    } else if (action === 'deleteCurrent') {
+      if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
+      deleteCurrentNode(selectedNodeId);
     } else if (action === 'deleteNode') {
       if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
-      var wf = getActiveWorkflow();
-      if (wf && selectedNodeId === wf.tree.id) { showToast('不能删除根节点', 'warning'); return; }
-      if (wf) ensureMainNode(wf);
-      if (wf && isMainNode(wf, selectedNodeId)) { showToast('主节点是流程锚点，不能删除', 'warning'); return; }
-      var delNode = wf ? findNode(wf.tree, selectedNodeId) : null;
-      if (delNode && delNode.locked) { showToast('锁定节点不能删除', 'warning'); return; }
       deleteNode(selectedNodeId);
   } else if (action === 'copyNode') {
     if (!selectedNodeId) { showToast('请先选择一个节点', 'warning'); return; }
