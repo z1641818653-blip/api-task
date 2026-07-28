@@ -1770,16 +1770,24 @@ function renderNode(node, depth) {
 }
 
 // ── Tree event delegation ──
+function closestTreeTarget(target, selector) {
+  if (target && typeof target.closest === 'function') return target.closest(selector);
+  if (target && target.parentElement && typeof target.parentElement.closest === 'function') {
+    return target.parentElement.closest(selector);
+  }
+  return null;
+}
+
 document.getElementById('treeContainer').addEventListener('click', function(e) {
-  var card = e.target.closest('.t-node');
+  var card = closestTreeTarget(e.target, '.t-node');
   if (!card) return;
-  if (e.target.closest('.node-drag')) return;
+  if (closestTreeTarget(e.target, '.node-drag')) return;
   selectedNodeId = card.dataset.id;
   renderAll();
 });
 
 document.getElementById('treeContainer').addEventListener('contextmenu', function(e) {
-  var card = e.target.closest('.t-node');
+  var card = closestTreeTarget(e.target, '.t-node');
   if (!card) return;
   showContextMenu(e, card.dataset.id);
 });
@@ -1799,7 +1807,7 @@ function getTreeDropMode(card, clientY) {
 }
 
 document.getElementById('treeContainer').addEventListener('dragstart', function(e) {
-  var handle = e.target.closest('.node-drag');
+  var handle = closestTreeTarget(e.target, '.node-drag');
   if (!handle || handle.getAttribute('draggable') !== 'true') {
     e.preventDefault();
     return;
@@ -1814,7 +1822,7 @@ document.getElementById('treeContainer').addEventListener('dragstart', function(
 });
 
 document.getElementById('treeContainer').addEventListener('dragover', function(e) {
-  var card = e.target.closest('.t-node');
+  var card = closestTreeTarget(e.target, '.t-node');
   if (!card || !draggedNodeId || card.dataset.id === draggedNodeId) return;
   var wf = getActiveWorkflow();
   var draggedNode = wf ? findNode(wf.tree, draggedNodeId) : null;
@@ -1828,7 +1836,7 @@ document.getElementById('treeContainer').addEventListener('dragover', function(e
 });
 
 document.getElementById('treeContainer').addEventListener('drop', function(e) {
-  var card = e.target.closest('.t-node');
+  var card = closestTreeTarget(e.target, '.t-node');
   if (!card || !draggedNodeId) return;
   e.preventDefault();
   var targetId = card.dataset.id;
