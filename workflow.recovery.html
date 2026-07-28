@@ -480,14 +480,33 @@ function readWorkflowImport(data) {
   };
 }
 
-function applyWorkflowImport(wf, data) {
-  if (!wf) throw new Error('当前没有可导入的流程');
+function getImportTitleFromFile(fileName) {
+  var name = typeof fileName === 'string' ? fileName.trim() : '';
+  return name.replace(/\.workflow\.json$/i, '').replace(/\.json$/i, '') || '导入流程';
+}
+
+function getUniqueWorkflowTitle(title) {
+  var base = typeof title === 'string' && title.trim() ? title.trim() : '导入流程';
+  var existing = new Set(workflows.map(function(wf) { return wf.title; }));
+  if (!existing.has(base)) return base;
+  var match = base.match(/^(.*)（(\d+)）$/);
+  var root = match && match[1] ? match[1] : base;
+  var index = 1;
+  while (existing.has(root + '（' + index + '）')) index += 1;
+  return root + '（' + index + '）';
+}
+
+function applyWorkflowImport(data, fileName) {
   var imported = readWorkflowImport(data);
-  wf.tree = imported.tree;
-  if (imported.title) wf.title = imported.title;
-  if (imported.createdAt) wf.createdAt = imported.createdAt;
-  wf.updatedAt = new Date().toISOString();
-  normalizeWorkflowData(wf, 0);
+  var now = new Date().toISOString();
+  var wf = {
+    id: 'wf_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    title: getUniqueWorkflowTitle(imported.title || getImportTitleFromFile(fileName)),
+    tree: imported.tree,
+    createdAt: now,
+    updatedAt: now
+  };
+  normalizeWorkflowData(wf, workflows.length);
 
   if (imported.provider) {
     if (typeof imported.provider.provider === 'string' && imported.provider.provider &&
@@ -496,7 +515,12 @@ function applyWorkflowImport(wf, data) {
     }
     if (typeof imported.provider.model === 'string') providerState.model = imported.provider.model;
   }
-  return ensureMainNode(wf);
+
+  workflows.push(wf);
+  activeWorkflowId = wf.id;
+  var mainNode = ensureMainNode(wf);
+  selectedNodeId = mainNode ? mainNode.id : null;
+  return wf;
 }
 
 function getActiveWorkflow(){return workflows.find(w=>w.id===activeWorkflowId);}
@@ -522,7 +546,8 @@ function ensureMainNode(wf) {
     }
   }
   mainNode._isMainNode = true;
-  mainNode.locked = false;
+  mainNode.inputType = 'manual';
+  mainNode.inheritFrom = null;
   if (!mainNode.title) mainNode.title = '主任务';
   (function clearDuplicateMainMarkers(node) {
     if (!node || !Array.isArray(node.children)) return;
@@ -737,9 +762,7 @@ function copyNode(nodeId) {
   ensureMainNode(wf);
   const node = findNode(wf.tree, nodeId);
   if (!node) return;
-  if (isMainNode(wf, node)) { showToast('主节点不能复制', 'warning'); return; }
   copiedNode = JSON.parse(JSON.stringify(node));
-  delete copiedNode.id;
   showToast('节点已复制', 'success');
 }
 
@@ -750,14 +773,16 @@ function pasteNode(targetId) {
   const target = findNode(wf.tree, targetId);
   if (!target) { showToast('目标节点不存在', 'error'); return; }
   const newNode = JSON.parse(JSON.stringify(copiedNode));
-  newNode.id = 'n' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-  newNode.status = 'pending';
-  newNode.output = '';
-  newNode.error = '';
-  (function clearIds(n) {
-    n._parentId = target.id;
-    for (const c of n.children) clearIds(c);
-  })(newNode);
+  (function prepareCopiedNode(n, parentId) {
+    n.id = 'n' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+    n._parentId = parentId;
+    delete n._isMainNode;
+    n.status = 'pending';
+    n.output = '';
+    n.error = '';
+    if (!Array.isArray(n.children)) n.children = [];
+    for (const c of n.children) prepareCopiedNode(c, n.id);
+  })(newNode, target.id);
   target.children.push(newNode);
   if (target._collapsed) target._collapsed = false;
   saveState();
@@ -770,15 +795,9 @@ function pasteNode(targetId) {
 function toggleNodeLock(id) {
   var wf = getActiveWorkflow();
   if (!wf) return;
-  var mainNode = ensureMainNode(wf);
+  ensureMainNode(wf);
   var n = findNode(wf.tree, id);
   if (!n) return;
-  if (isMainNode(wf, n)) {
-    mainNode.locked = false;
-    showToast('主节点可编辑，删除由结构保护控制', 'info');
-    renderAll();
-    return;
-  }
   n.locked = !n.locked;
   saveState();
   renderAll();
@@ -1329,13 +1348,11 @@ function renderSettings() {
     reader.onload = function(ev) {
       try {
         const data = JSON.parse(ev.target.result);
-        var wf = getActiveWorkflow();
-        var importedMainNode = applyWorkflowImport(wf, data);
-        selectedNodeId = importedMainNode ? importedMainNode.id : null;
+        var importedWorkflow = applyWorkflowImport(data, file.name);
         if (!saveState()) throw new Error('导入内容无法保存到浏览器');
         renderWorkflowList();
         renderAll();
-        showToast('流程已导入，API Key 保持当前设置', 'success');
+        showToast('已导入为新流程：' + importedWorkflow.title + '，API Key 保持当前设置', 'success');
       } catch(err) {
         showToast('导入失败: ' + err.message, 'error');
       }
@@ -1395,6 +1412,33 @@ function renderWorkspace() {
   const locked = node.locked;
   const mainProtected = isMainNode(wf, node);
   const dis = locked ? ' disabled' : '';
+  let inputSourceHtml = '';
+  if (mainProtected) {
+    node.inputType = 'manual';
+    node.inheritFrom = null;
+    inputSourceHtml =
+      '<div class="form-group" id="inputSourceGroup">' +
+        '<label class="form-label">输入内容</label>' +
+        '<textarea class="form-textarea" id="inpManualInput" rows="2" placeholder="输入内容将前置到 prompt"' + dis + '>' + esc(node.manualInput) + '</textarea>' +
+      '</div>';
+  } else {
+    inputSourceHtml =
+      '<div class="form-group">' +
+        '<label class="form-label">输入来源</label>' +
+        '<select class="form-select" id="selInputType"' + dis + '>' +
+          '<option value="manual"' + (node.inputType === 'manual' ? ' selected' : '') + '>手动输入</option>' +
+          '<option value="inherit"' + (node.inputType === 'inherit' ? ' selected' : '') + '>继承上级</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group" id="inputSourceGroup" style="' + (node.inputType === 'manual' ? '' : 'display:none') + '">' +
+        '<label class="form-label">手动输入</label>' +
+        '<textarea class="form-textarea" id="inpManualInput" rows="2" placeholder="输入内容将前置到 prompt"' + dis + '>' + esc(node.manualInput) + '</textarea>' +
+      '</div>' +
+      '<div class="form-group" id="inheritGroup" style="' + (node.inputType === 'inherit' ? '' : 'display:none') + '">' +
+        '<label class="form-label">继承自</label>' +
+        '<select class="form-select" id="selInheritFrom"' + dis + '>' + inheritOpts + '</select>' +
+      '</div>';
+  }
 
   content.innerHTML =
     (locked ? '<div class="form-group"><span class="status-badge">🔒 已锁定</span></div>' : '') +
@@ -1402,21 +1446,7 @@ function renderWorkspace() {
       '<label class="form-label">标题</label>' +
       '<input class="form-input" id="inpTitle" value="' + esc(node.title) + '"' + dis + '>' +
     '</div>' +
-    '<div class="form-group">' +
-      '<label class="form-label">输入来源</label>' +
-      '<select class="form-select" id="selInputType"' + dis + '>' +
-        '<option value="manual"' + (node.inputType === 'manual' ? ' selected' : '') + '>手动输入</option>' +
-        '<option value="inherit"' + (node.inputType === 'inherit' ? ' selected' : '') + '>继承上级</option>' +
-      '</select>' +
-    '</div>' +
-    '<div class="form-group" id="inputSourceGroup" style="' + (node.inputType === 'manual' ? '' : 'display:none') + '">' +
-      '<label class="form-label">手动输入</label>' +
-      '<textarea class="form-textarea" id="inpManualInput" rows="2" placeholder="输入内容将前置到 prompt"' + dis + '>' + esc(node.manualInput) + '</textarea>' +
-    '</div>' +
-    '<div class="form-group" id="inheritGroup" style="' + (node.inputType === 'inherit' ? '' : 'display:none') + '">' +
-      '<label class="form-label">继承自</label>' +
-      '<select class="form-select" id="selInheritFrom"' + dis + '>' + inheritOpts + '</select>' +
-    '</div>' +
+    inputSourceHtml +
     '<div class="form-group">' +
       '<label class="form-label">Prompt</label>' +
       '<textarea class="form-textarea mono" id="inpPrompt" rows="3" style="font-size:11px"' + dis + '>' + esc(node.prompt) + '</textarea>' +
@@ -1448,7 +1478,7 @@ function renderWorkspace() {
         '<button class="btn btn-sm" id="btnExecuteAll">▶ 全部执行</button>' +
         '<button class="btn btn-sm" id="btnStop" ' + (stopDisabled ? 'disabled style="opacity:.4"' : '') + '>⏹ 停止</button>' +
         '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' disabled title="主节点不可删除，但可以编辑"' : '') + '>' + (mainProtected ? '🛡️ 主节点保护' : (locked ? '🔒 已锁定' : '🔓 锁定')) + '</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' title="主节点不可删除；锁定仅用于防止误修改"' : '') + '>' + (locked ? '🔒 已锁定' : '🔓 锁定') + '</button>' +
       '</div>' +
     '</div>' +
     '<div id="execProgress" style="display:none;margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)">' +
@@ -1471,19 +1501,22 @@ function renderWorkspace() {
     saveState();
     renderTree();
   });
-  document.getElementById('selInputType').addEventListener('change', function() {
+  var inputTypeSelect = document.getElementById('selInputType');
+  if (inputTypeSelect) inputTypeSelect.addEventListener('change', function() {
     node.inputType = this.value;
     const manualGroup = document.getElementById('inputSourceGroup');
     const inheritGroup = document.getElementById('inheritGroup');
-    manualGroup.style.display = this.value === 'manual' ? '' : 'none';
-    inheritGroup.style.display = this.value === 'inherit' ? '' : 'none';
+    if (manualGroup) manualGroup.style.display = this.value === 'manual' ? '' : 'none';
+    if (inheritGroup) inheritGroup.style.display = this.value === 'inherit' ? '' : 'none';
     saveState();
   });
-  document.getElementById('inpManualInput').addEventListener('change', function() {
+  var manualInput = document.getElementById('inpManualInput');
+  if (manualInput) manualInput.addEventListener('change', function() {
     node.manualInput = this.value;
     saveState();
   });
-  document.getElementById('selInheritFrom').addEventListener('change', function() {
+  var inheritSelect = document.getElementById('selInheritFrom');
+  if (inheritSelect) inheritSelect.addEventListener('change', function() {
     node.inheritFrom = this.value || null;
     saveState();
   });
