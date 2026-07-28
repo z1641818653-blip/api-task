@@ -287,6 +287,24 @@ body{
 .node-status.done{background:#10b981}
 .node-status.error,.node-status.failed{background:#ef4444}
 .node-status.stopped{background:#f59e0b}
+.node-status.blocked{background:#7f1d1d}
+.t-node.validation-input,.t-node.runtime-failed{
+  background:#dc2626!important;border-color:#991b1b!important;color:#fff!important;
+  box-shadow:0 0 0 2px rgba(220,38,38,.18),0 4px 12px rgba(127,29,29,.25)!important;
+  opacity:1!important
+}
+.t-node.validation-prompt{
+  background:#2563eb!important;border-color:#1d4ed8!important;color:#fff!important;
+  box-shadow:0 0 0 2px rgba(37,99,235,.16),0 4px 12px rgba(30,64,175,.22)!important;
+  opacity:1!important
+}
+.t-node.validation-input span,.t-node.validation-prompt span,.t-node.runtime-failed span{
+  color:#fff!important
+}
+.t-node.validation-input::before,.t-node.validation-prompt::before,.t-node.runtime-failed::before{display:none}
+.t-node.validation-input .node-status,.t-node.validation-prompt .node-status,.t-node.runtime-failed .node-status{
+  border-color:rgba(255,255,255,.9)
+}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .t-node.locked .node-drag{opacity:.12;cursor:default}
 .t-node.dragging{opacity:.45;transform:scale(.98)}
@@ -405,6 +423,7 @@ body{
     <div class="header">🌳 流程控制</div>
     <div class="body" id="treeBody"><div id="treeContainer"></div></div>
     <div class="tree-buttons" id="treeButtons">
+      <button class="btn btn-sm btn-primary" style="flex-basis:100%" data-action="executeTree">▶ 运行整个流程树</button>
       <button class="btn btn-sm" data-action="addChild">➕ 添加子节点</button>
       <button class="btn btn-sm" data-action="deleteCurrent">✂ 仅删当前</button>
       <button class="btn btn-sm btn-danger" data-action="deleteNode">✕ 删除分支</button>
@@ -1051,215 +1070,267 @@ const PROVIDERS = {
   }
 };
 
-// ── SSE execution ──
-async function executeNode(nodeId) {
+// ── Execution validation and SSE execution ──
+function hasNodeText(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function getNodeConfigurationIssue(wf, node) {
+  if (!wf || !node) return { level: 'error', reason: '节点不存在' };
+  var inputValid = false;
+  var inputReason = '';
+  if (isMainNode(wf, node) || node.inputType === 'manual') {
+    inputValid = hasNodeText(node.manualInput);
+    inputReason = '手动输入为空';
+  } else if (node.inputType === 'inherit') {
+    var source = node.inheritFrom ? findNode(wf.tree, node.inheritFrom) : null;
+    var ancestors = getAncestors(wf.tree, node.id).filter(function(ancestor) {
+      return ancestor.id !== wf.tree.id;
+    });
+    inputValid = !!(source && ancestors.some(function(ancestor) { return ancestor.id === source.id; }));
+    inputReason = node.inheritFrom ? '继承来源无效' : '尚未选择继承来源';
+  } else {
+    inputReason = '输入来源无效';
+  }
+  if (!inputValid) return { level: 'error', reason: inputReason };
+  if (!hasNodeText(node.prompt)) return { level: 'warning', reason: 'Prompt 为空' };
+  return null;
+}
+
+function collectExecutionIssues(wf, nodes, mode) {
+  var byNode = {};
+  (nodes || []).forEach(function(node) {
+    var issue = getNodeConfigurationIssue(wf, node);
+    if (issue) byNode[node.id] = { node: node, level: issue.level, reason: issue.reason };
+  });
+  if (mode === 'single' && nodes && nodes[0]) {
+    var current = nodes[0];
+    var incompleteAncestors = getAncestors(wf.tree, current.id).filter(function(ancestor) {
+      return ancestor.id !== wf.tree.id && (ancestor.status !== 'done' || !hasNodeText(ancestor.output));
+    });
+    if (incompleteAncestors.length) {
+      byNode[current.id] = {
+        node: current,
+        level: 'error',
+        reason: '上级节点尚未全部完成并产生输出'
+      };
+    }
+  }
+  return Object.keys(byNode).map(function(id) { return byNode[id]; });
+}
+
+function showExecutionChoice(issues, onForce) {
+  var redCount = issues.filter(function(issue) { return issue.level === 'error'; }).length;
+  var blueCount = issues.filter(function(issue) { return issue.level === 'warning'; }).length;
+  var samples = issues.slice(0, 3).map(function(issue) {
+    return '“' + (issue.node.title || '未命名') + '”：' + issue.reason;
+  }).join('；');
+  var message = '检测到 ' + redCount + ' 个红色问题、' + blueCount + ' 个蓝色提醒。' +
+    (samples ? samples + '。' : '') + '请选择返回完善流程，或强制执行。';
+  var overlay = document.getElementById('confirmOverlay');
+  var msg = document.getElementById('confirmMsg');
+  var yes = document.getElementById('confirmYes');
+  var no = document.getElementById('confirmNo');
+  var oldYes = yes.textContent;
+  var oldNo = no.textContent;
+  msg.textContent = message;
+  yes.textContent = '强制执行';
+  no.textContent = '返回完善';
+  overlay.style.display = 'flex';
+  function closeChoice() {
+    overlay.style.display = 'none';
+    yes.removeEventListener('click', forceExecution);
+    no.removeEventListener('click', closeChoice);
+    yes.textContent = oldYes;
+    no.textContent = oldNo;
+  }
+  function forceExecution() {
+    closeChoice();
+    onForce();
+  }
+  yes.addEventListener('click', forceExecution);
+  no.addEventListener('click', closeChoice);
+}
+
+function getDependencyChain(wf, node) {
+  if (!wf || !node) return [];
+  return getAncestors(wf.tree, node.id).filter(function(ancestor) {
+    return ancestor.id !== wf.tree.id;
+  }).concat([node]);
+}
+
+function prepareExecution(nodes, mode, force) {
   if (isRunning) { showToast('正在执行中', 'warning'); return; }
   var wf = getActiveWorkflow();
-  if (!wf) return;
-  const node = findNode(wf.tree, nodeId);
+  if (!wf || !nodes || !nodes.length) return;
+  var issues = collectExecutionIssues(wf, nodes, mode);
+  if (issues.length && !force) {
+    showExecutionChoice(issues, function() {
+      prepareExecution(nodes, mode, true);
+    });
+    return;
+  }
+  runExecutionQueue(nodes, { mode: mode, force: !!force });
+}
+
+function executeNode(nodeId, force) {
+  var wf = getActiveWorkflow();
+  var node = wf ? findNode(wf.tree, nodeId) : null;
   if (!node) return;
+  prepareExecution([node], 'single', force);
+}
+
+function runDependencyChain(nodeId, force) {
+  var wf = getActiveWorkflow();
+  var node = wf ? findNode(wf.tree, nodeId) : null;
+  if (!node) return;
+  prepareExecution(getDependencyChain(wf, node), 'dependencies', force);
+}
+
+function runCascade(nodeId, force) {
+  return runDependencyChain(nodeId, force);
+}
+
+function executeAll(force) {
+  var wf = getActiveWorkflow();
+  var mainNode = wf ? ensureMainNode(wf) : null;
+  if (!mainNode) return;
+  prepareExecution(dfsNodes(mainNode), 'all', force);
+}
+
+async function runExecutionQueue(nodes, options) {
+  if (isRunning) { showToast('正在执行中', 'warning'); return; }
+  var wf = getActiveWorkflow();
+  if (!wf || !nodes || !nodes.length) return;
   if (!providerState.apiKey) { showToast('请先设置 API Key', 'warning'); return; }
+  var provider = PROVIDERS[providerState.provider];
+  if (!provider) { showToast('当前 Provider 不可用', 'error'); return; }
 
   isRunning = true;
   abortController = new AbortController();
-  node.status = 'running';
-  node.output = '';
-  node.error = '';
+  runQueue = nodes.map(function(node) { return node.id; });
+  runIndex = 0;
+  nodes.forEach(function(node) {
+    node.status = 'pending';
+    node.output = '';
+    node.error = '';
+  });
   renderAll();
+  updateProgress(0, nodes.length, '');
+  updateBottomBar();
 
   try {
-    let actualPrompt = node.prompt || '';
-    const inputSource = node.inputType;
-    if (inputSource === 'manual' && node.manualInput) {
-      actualPrompt = node.manualInput + '\n\n' + (node.prompt || '');
-    } else if (inputSource === 'inherit' && node.inheritFrom) {
-      const ancestor = findNode(wf.tree, node.inheritFrom);
-      if (ancestor && ancestor.output) {
-        actualPrompt = ancestor.output + '\n\n' + (node.prompt || '');
+    for (var i = 0; i < nodes.length; i++) {
+      if (abortController && abortController.signal.aborted) {
+        for (var stoppedIndex = i; stoppedIndex < nodes.length; stoppedIndex++) {
+          if (nodes[stoppedIndex].status === 'pending') nodes[stoppedIndex].status = 'stopped';
+        }
+        break;
       }
-    }
+      runIndex = i;
+      var node = nodes[i];
+      var nodeId = node.id;
 
-    const p = PROVIDERS[providerState.provider];
-    if (!p) throw new Error('不支持的 Provider');
+      if (options.mode !== 'single') {
+        var unmet = getAncestors(wf.tree, nodeId).filter(function(ancestor) {
+          return ancestor.id !== wf.tree.id && (ancestor.status !== 'done' || !hasNodeText(ancestor.output));
+        });
+        if (unmet.length) {
+          node.status = 'blocked';
+          node.output = '';
+          node.error = '前置节点未完成或没有输出：' + unmet.map(function(item) {
+            return item.title || '未命名';
+          }).join('、');
+          saveState();
+          renderAll();
+          updateProgress(i + 1, nodes.length, '');
+          continue;
+        }
+      }
 
-    const model = providerState.model || '';
-    const url = p.getUrl ? p.getUrl(model, providerState.apiKey) : p.endpoint;
-    const headers = p.buildHeaders(providerState.apiKey);
-    const body = p.buildBody(model, actualPrompt || 'Hello', node.maxTokens, node.temperature);
-    const parseFn = p.parse;
+      var actualPrompt = node.prompt || '';
+      if ((isMainNode(wf, node) || node.inputType === 'manual') && hasNodeText(node.manualInput)) {
+        actualPrompt = node.manualInput + (hasNodeText(node.prompt) ? '\n\n' + node.prompt : '');
+      } else if (node.inputType === 'inherit' && node.inheritFrom) {
+        var source = findNode(wf.tree, node.inheritFrom);
+        if (source && hasNodeText(source.output)) {
+          actualPrompt = source.output + (hasNodeText(node.prompt) ? '\n\n' + node.prompt : '');
+        }
+      }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: abortController.signal
-    });
+      node.status = 'running';
+      node.output = '';
+      node.error = '';
+      selectedNodeId = nodeId;
+      renderAll();
+      updateProgress(i, nodes.length, node.title || '未命名');
+      updateBottomBar();
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error('HTTP ' + response.status + (errText ? ': ' + errText.slice(0,200) : ''));
-    }
+      try {
+        var model = providerState.model || '';
+        var url = provider.getUrl ? provider.getUrl(model, providerState.apiKey) : provider.endpoint;
+        var headers = provider.buildHeaders(providerState.apiKey);
+        var body = provider.buildBody(model, actualPrompt || 'Hello', node.maxTokens, node.temperature);
+        var parseFn = provider.parse;
+        var response = await fetch(url, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body),
+          signal: abortController.signal
+        });
+        if (!response.ok) {
+          var errText = await response.text().catch(function() { return ''; });
+          throw new Error('HTTP ' + response.status + (errText ? ': ' + errText.slice(0, 200) : ''));
+        }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    let accumulated = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const parts = buf.split('\n');
-      buf = parts.pop() || '';
-      for (const line of parts) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(5).trim();
-        if (payload === '[DONE]' || payload === '[done]') continue;
-        try {
-          const parsed = JSON.parse(payload);
-          const text = parseFn(parsed);
-          if (text) {
-            accumulated += text;
-            node.output = accumulated;
-            updateOutputDisplay(nodeId);
+        var reader = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        var accumulated = '';
+        while (true) {
+          var readResult = await reader.read();
+          if (readResult.done) break;
+          buffer += decoder.decode(readResult.value, { stream: true });
+          var parts = buffer.split('\n');
+          buffer = parts.pop() || '';
+          for (var partIndex = 0; partIndex < parts.length; partIndex++) {
+            var line = parts[partIndex];
+            if (!line.startsWith('data: ')) continue;
+            var payload = line.slice(5).trim();
+            if (payload === '[DONE]' || payload === '[done]') continue;
+            try {
+              var parsed = JSON.parse(payload);
+              var text = parseFn(parsed);
+              if (text) {
+                accumulated += text;
+                node.output = accumulated;
+                updateOutputDisplay(nodeId);
+              }
+            } catch (parseError) {}
           }
-        } catch(e) { /* skip malformed */ }
+        }
+        if (!hasNodeText(node.output)) throw new Error('模型未返回有效输出');
+        node.status = 'done';
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          node.status = 'stopped';
+        } else {
+          node.status = 'error';
+          node.error = error.message;
+        }
       }
-    }
-
-    node.status = 'done';
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      const n = findNode(wf.tree, nodeId);
-      if (n) n.status = 'stopped';
-    } else {
-      const n = findNode(wf.tree, nodeId);
-      if (n) { n.status = 'error'; n.error = err.message; }
+      saveState();
+      renderAll();
+      updateProgress(i + 1, nodes.length, '');
     }
   } finally {
     isRunning = false;
     abortController = null;
-    saveState();
-    renderAll();
-  }
-}
-
-async function executeAll() {
-  if (isRunning) { showToast('正在执行中', 'warning'); return; }
-  var wf = getActiveWorkflow();
-  if (!wf) return;
-  const node = ensureMainNode(wf);
-  if (!node) return;
-  if (!providerState.apiKey) { showToast('请先设置 API Key', 'warning'); return; }
-
-  isRunning = true;
-  abortController = new AbortController();
-
-  const allNodes = dfsNodes(node);
-  runQueue = allNodes.map(n => n.id);
-  runIndex = 0;
-
-  for (const nid of runQueue) {
-    const n = findNode(wf.tree, nid);
-    if (!n) continue;
-    n.status = 'pending';
-    n.output = '';
-    n.error = '';
-  }
-  renderAll();
-  updateBottomBar();
-
-  for (let i = 0; i < runQueue.length; i++) {
-    if (abortController?.signal.aborted) break;
-    runIndex = i;
-    const nid = runQueue[i];
-    const n = findNode(wf.tree, nid);
-    if (!n) continue;
-
-    let actualPrompt = n.prompt || '';
-    const inputSource = n.inputType;
-    if (inputSource === 'manual' && n.manualInput) {
-      actualPrompt = n.manualInput + '\n\n' + (n.prompt || '');
-    } else if (inputSource === 'inherit' && n.inheritFrom) {
-      const ancestor = findNode(wf.tree, n.inheritFrom);
-      if (ancestor && ancestor.output) {
-        actualPrompt = ancestor.output + '\n\n' + (n.prompt || '');
-      }
-    }
-
-    n.status = 'running';
-    n.output = '';
-    n.error = '';
-    selectedNodeId = nid;
-    renderAll();
-    updateBottomBar();
-
-    try {
-      const p = PROVIDERS[providerState.provider];
-      const model = providerState.model || '';
-      const url = p.getUrl ? p.getUrl(model, providerState.apiKey) : p.endpoint;
-      const headers = p.buildHeaders(providerState.apiKey);
-      const body = p.buildBody(model, actualPrompt || 'Hello', n.maxTokens, n.temperature);
-      const parseFn = p.parse;
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: abortController.signal
-      });
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        throw new Error('HTTP ' + response.status + (errText ? ': ' + errText.slice(0,200) : ''));
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      let accumulated = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const parts = buf.split('\n');
-        buf = parts.pop() || '';
-        for (const line of parts) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(5).trim();
-          if (payload === '[DONE]' || payload === '[done]') continue;
-          try {
-            const parsed = JSON.parse(payload);
-            const text = parseFn(parsed);
-            if (text) {
-              accumulated += text;
-              n.output = accumulated;
-              updateOutputDisplay(nid);
-            }
-          } catch(e) {}
-        }
-      }
-
-      n.status = 'done';
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        n.status = 'stopped';
-      } else {
-        n.status = 'error';
-        n.error = err.message;
-      }
-    }
+    runIndex = runQueue.length;
     saveState();
     renderAll();
     updateBottomBar();
   }
-
-  isRunning = false;
-  abortController = null;
-  runIndex = runQueue.length;
-  saveState();
-  updateBottomBar();
 }
 
 function stopExecution() {
@@ -1289,103 +1360,20 @@ function updateBottomBar() {
   }
 }
 
-function buildQueue(node){var q=[];function w(n){if(n.status!=='done')q.push(n);n.children.forEach(function(c){w(c)});}w(node);return q}
-
-function updateProgress(current,total,label){
-  var textEl=document.getElementById('execProgressText');
-  var barEl=document.getElementById('execProgressBar');
-  if(!textEl||!barEl)return;
-  if(current>=total&&total>0){
-    textEl.textContent='全部完成 ('+total+'/'+total+')';
-  }else if(label){
-    textEl.textContent='执行中: '+label+' ('+current+'/'+total+')';
-  }else{
-    textEl.textContent='执行中: '+current+'/'+total;
+function updateProgress(current, total, label) {
+  var progress = document.getElementById('execProgress');
+  var textEl = document.getElementById('execProgressText');
+  var barEl = document.getElementById('execProgressBar');
+  if (!progress || !textEl || !barEl) return;
+  progress.style.display = isRunning ? 'block' : 'none';
+  if (current >= total && total > 0) {
+    textEl.textContent = '全部完成 (' + total + '/' + total + ')';
+  } else if (label) {
+    textEl.textContent = '执行中: ' + label + ' (' + current + '/' + total + ')';
+  } else {
+    textEl.textContent = '执行中: ' + current + '/' + total;
   }
-  barEl.style.width=(total>0?(current/total*100):0)+'%';
-}
-
-async function runCascade(nodeId){
-  if(isRunning){showToast('正在执行中','warning');return;}
-  var wf = getActiveWorkflow();
-  if (!wf) return;
-  var node=findNode(wf.tree,nodeId);
-  if(!node)return;
-  if(!providerState.apiKey){showToast('请先设置 API Key','warning');return;}
-  var queue=buildQueue(node);
-  if(queue.length===0){showToast('没有待执行的节点','info');return;}
-  isRunning = true;
-  abortController = new AbortController();
-  document.getElementById('execProgress').style.display='block';
-  updateProgress(0,queue.length,'');
-  runQueue=queue.map(function(n){return n.id});
-  runIndex=0;
-  queue.forEach(function(n){n.status='pending';n.output='';n.error='';});
-  renderAll();
-  for(var i=0;i<queue.length;i++){
-    if(abortController&&abortController.signal.aborted)break;
-    runIndex=i;
-    var n=queue[i];
-    var nid=n.id;
-    var actualPrompt=n.prompt||'';
-    if(n.inputType==='manual'&&n.manualInput){
-      actualPrompt=n.manualInput+'\n\n'+(n.prompt||'');
-    }else if(n.inputType==='inherit'&&n.inheritFrom){
-      var ancestor=findNode(wf.tree,n.inheritFrom);
-      if(ancestor&&ancestor.output)actualPrompt=ancestor.output+'\n\n'+(n.prompt||'');
-    }
-    n.status='running';n.output='';n.error='';
-    selectedNodeId=nid;
-    renderAll();
-    updateProgress(i,queue.length,n.title||'未命名');
-    try{
-      var p=PROVIDERS[providerState.provider];
-      var model=providerState.model||'';
-      var url=p.getUrl?p.getUrl(model,providerState.apiKey):p.endpoint;
-      var headers=p.buildHeaders(providerState.apiKey);
-      var body=p.buildBody(model,actualPrompt||'Hello',n.maxTokens,n.temperature);
-      var parseFn=p.parse;
-      var response=await fetch(url,{method:'POST',headers,body:JSON.stringify(body),signal:abortController.signal});
-      if(!response.ok){
-        var errText=await response.text().catch(function(){return'';});
-        throw new Error('HTTP '+response.status+(errText?': '+errText.slice(0,200):''));
-      }
-      var reader=response.body.getReader();
-      var decoder=new TextDecoder();
-      var buf='',accumulated='';
-      while(true){
-        var r=await reader.read();
-        if(r.done)break;
-        buf+=decoder.decode(r.value,{stream:true});
-        var parts=buf.split('\n');
-        buf=parts.pop()||'';
-        for(var j=0;j<parts.length;j++){
-          var line=parts[j];
-          if(!line.startsWith('data: '))continue;
-          var payload=line.slice(5).trim();
-          if(payload==='[DONE]'||payload==='[done]')continue;
-          try{
-            var parsed=JSON.parse(payload);
-            var text=parseFn(parsed);
-            if(text){accumulated+=text;n.output=accumulated;updateOutputDisplay(nid);}
-          }catch(e){}
-        }
-      }
-      n.status='done';
-    }catch(err){
-      if(err.name==='AbortError'){n.status='stopped';}else{n.status='error';n.error=err.message;}
-    }
-    saveState();
-    renderAll();
-    updateProgress(i+1,queue.length,'');
-  }
-  isRunning = false;
-  abortController=null;
-  saveState();
-  updateProgress(queue.length,queue.length,'');
-  setTimeout(function(){var el=document.getElementById('execProgress');if(el)el.style.display='none';},2000);
-  runIndex=runQueue.length;
-  updateBottomBar();
+  barEl.style.width = (total > 0 ? (current / total * 100) : 0) + '%';
 }
 
 // ── Toast ──
@@ -1462,6 +1450,11 @@ function renderAll() {
 }
 
 function updateTreeActionButtons() {
+  var executeTreeBtn = document.querySelector('#treeButtons .btn[data-action="executeTree"]');
+  if (executeTreeBtn) {
+    executeTreeBtn.disabled = isRunning;
+    executeTreeBtn.title = isRunning ? '流程正在执行' : '从主节点开始运行整个流程树';
+  }
   var deleteBtns = document.querySelectorAll('#treeButtons .btn[data-action="deleteCurrent"],#treeButtons .btn[data-action="deleteNode"]');
   if (!deleteBtns.length) return;
   var wf = getActiveWorkflow();
@@ -1612,7 +1605,8 @@ function renderWorkspace() {
 
   const stopDisabled = !isRunning;
   const statusClass = node.status || 'pending';
-  const execMode = localStorage.getItem('wf_execMode') || 'single';
+  const savedExecMode = localStorage.getItem('wf_execMode') || 'single';
+  const execMode = savedExecMode === 'cascade' ? 'dependencies' : savedExecMode;
   const locked = node.locked;
   const mainProtected = isMainNode(wf, node);
   const dis = locked ? ' disabled' : '';
@@ -1672,14 +1666,14 @@ function renderWorkspace() {
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
       '<label style="font-size:11px;color:var(--text2)">模式:</label>' +
       '<select id="execMode" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);outline:none"' + dis + '>' +
-        '<option value="single"' + (execMode==='single'?' selected':'') + '>仅当前</option>' +
-        '<option value="cascade"' + (execMode==='cascade'?' selected':'') + '>级联（含子节点）</option>' +
+        '<option value="single"' + (execMode==='single'?' selected':'') + '>仅当前节点</option>' +
+        '<option value="dependencies"' + (execMode==='dependencies'?' selected':'') + '>依赖链（上级→当前）</option>' +
       '</select>' +
     '</div>' +
     '<div class="form-group">' +
       '<div class="btn-group">' +
-        '<button class="btn btn-primary btn-sm" id="btnExecute">▶ 执行</button>' +
-        '<button class="btn btn-sm" id="btnExecuteAll">▶ 全部执行</button>' +
+        '<button class="btn btn-primary btn-sm" id="btnExecute">▶ 执行当前模式</button>' +
+        '<button class="btn btn-sm" id="btnExecuteAll">▶ 运行整个流程树</button>' +
         '<button class="btn btn-sm" id="btnStop" ' + (stopDisabled ? 'disabled style="opacity:.4"' : '') + '>⏹ 停止</button>' +
         '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
         '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' title="主节点不可删除；锁定仅用于防止误修改"' : '') + '>' + (locked ? '🔒 已锁定' : '🔓 锁定') + '</button>' +
@@ -1751,8 +1745,8 @@ function renderWorkspace() {
   document.getElementById('btnExecute').addEventListener('click', function() {
     saveCurrentNodeEdit();
     if (!selectedNodeId) return;
-    if (document.getElementById('execMode').value === 'cascade') {
-      runCascade(selectedNodeId);
+    if (document.getElementById('execMode').value === 'dependencies') {
+      runDependencyChain(selectedNodeId);
     } else {
       executeNode(selectedNodeId);
     }
@@ -1765,7 +1759,7 @@ function renderWorkspace() {
 }
 
 function getStatusText(status) {
-  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', error: '❌ 错误', stopped: '⏹ 已停止' };
+  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', error: '❌ 错误', blocked: '🚫 依赖阻塞', stopped: '⏹ 已停止' };
   return m[status] || '⏳ 待执行';
 }
 
@@ -1813,8 +1807,14 @@ function renderNode(node, depth) {
   let col = node.color ? ' color-' + node.color : '';
   let lok = node.locked ? ' locked' : '';
   let stat = node.status || 'pending';
+  let validation = wf ? getNodeConfigurationIssue(wf, node) : null;
+  let validationClass = stat === 'error' || stat === 'blocked' ? ' runtime-failed' :
+                        validation && validation.level === 'error' ? ' validation-input' :
+                        validation && validation.level === 'warning' ? ' validation-prompt' : '';
+  let validationTitle = stat === 'blocked' || stat === 'error' ? (node.error || getStatusText(stat)) :
+                        validation ? validation.reason : '';
   let html = '<li>';
-  html += '<div class="t-node' + sel + col + lok + '" data-id="' + node.id + '">';
+  html += '<div class="t-node' + sel + col + lok + validationClass + '" data-id="' + node.id + '" title="' + escAttr(validationTitle) + '">';
   var movable = !isMainNode(wf, node) && !node.locked;
   html += '<span class="node-drag" draggable="' + (movable ? 'true' : 'false') + '" data-id="' + node.id + '" title="' + (movable ? '拖拽移动节点' : '此节点不可移动') + '">⠿</span>';
   html += '<span class="node-num">' + (path ? path + '级' : '') + '</span>';
@@ -2169,7 +2169,10 @@ document.getElementById('treeButtons').addEventListener('click', function(e) {
   if (!btn) return;
   e.stopPropagation();
   var action = btn.dataset.action;
-  if (action === 'addChild') {
+  if (action === 'executeTree') {
+    saveCurrentNodeEdit();
+    executeAll();
+  } else if (action === 'addChild') {
     var wfa = getActiveWorkflow();
     if (!wfa) { showToast('请先创建一个流程', 'warning'); return; }
     if (!selectedNodeId || !findNode(wfa.tree, selectedNodeId)) {
