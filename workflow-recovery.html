@@ -92,24 +92,36 @@ body{
 }
 .panel-right.collapsed{padding:0;opacity:0;border:none;overflow:hidden}
 .panel-right .header{
-  padding:16px 18px 12px;font-size:13px;font-weight:700;color:var(--text);
-  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px
+  padding:12px 12px 10px;font-size:13px;font-weight:700;color:var(--text);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;
+  position:relative;z-index:420;overflow:visible;background:var(--surface)
 }
 .panel-right .body{flex:1;overflow-x:auto;overflow-y:auto;padding:12px 8px;min-height:0;display:flex;flex-direction:column;align-items:center}
-.flow-help{position:relative;width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);color:var(--primary);background:var(--surface2);font-size:11px;font-weight:800;cursor:help;outline:none}
-.flow-help:hover,.flow-help:focus{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 14%,transparent)}
-.flow-help-tooltip{position:absolute;top:26px;right:-8px;width:244px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:11px;font-weight:500;line-height:1.45;color:var(--text);opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .15s,transform .15s,visibility .15s;z-index:500}
+.flow-header-actions{margin-left:auto;display:flex;align-items:center;gap:5px;position:relative}
+.version-mini{
+  height:22px;min-width:29px;padding:0 5px;border-radius:7px;border:1px solid var(--border);
+  display:inline-flex;align-items:center;justify-content:center;gap:2px;background:var(--surface2);
+  color:var(--text2);font-size:12px;font-weight:800;cursor:pointer;line-height:1
+}
+.version-mini:hover:not(:disabled){border-color:var(--primary);color:var(--primary);background:var(--surface)}
+.version-mini:disabled{opacity:.36;cursor:not-allowed}
+.version-mini-count{font-size:8px;font-weight:700;min-width:6px}
+.flow-help{position:relative;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--surface));font-size:13px;font-weight:900;cursor:help;outline:none;z-index:430}
+.flow-help:hover,.flow-help:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent)}
+.flow-help-tooltip{
+  position:absolute;top:29px;right:0;width:238px;padding:11px 12px;border:1px solid var(--border);
+  border-radius:10px;background:var(--surface);box-shadow:0 10px 30px rgba(0,0,0,.22);
+  font-size:11px;font-weight:500;line-height:1.45;color:var(--text);opacity:0;visibility:hidden;
+  transform:translateY(-4px);transition:opacity .15s,transform .15s,visibility .15s;z-index:9999;
+  pointer-events:none
+}
 .flow-help:hover .flow-help-tooltip,.flow-help:focus .flow-help-tooltip{opacity:1;visibility:visible;transform:translateY(0)}
-.flow-help-title{font-weight:800;margin-bottom:6px}
-.flow-help-row{display:flex;align-items:flex-start;gap:7px;margin:4px 0}
-.flow-help-swatch{width:12px;height:12px;border-radius:4px;flex:0 0 12px;margin-top:2px;border:1px solid rgba(0,0,0,.08)}
+.flow-help-title{display:block;font-weight:800;margin-bottom:7px}
+.flow-help-row{display:flex;align-items:flex-start;gap:7px;margin:5px 0}
+.flow-help-swatch{width:13px;height:13px;border-radius:4px;flex:0 0 13px;margin-top:1px;border:1px solid rgba(0,0,0,.08)}
 .flow-help-swatch.red{background:#dc2626}.flow-help-swatch.blue{background:#2563eb}
-.flow-help-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;margin:3px 2px 0}
-.flow-help-dot.gray{background:#94a3b8}.flow-help-dot.yellow{background:#f59e0b}.flow-help-dot.green{background:#10b981}.flow-help-dot.orange{background:#f97316}
-.tree-version-bar{padding:7px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px;background:var(--surface2);flex-shrink:0}
-.tree-version-bar .btn{flex:1;justify-content:center}
-.tree-version-note{font-size:9px;color:var(--text2);white-space:nowrap}
-#btnRollbackVersion:disabled{opacity:.45;cursor:not-allowed}
+.flow-help-swatch.yellow{background:#f59e0b}.flow-help-swatch.green{background:#16a34a}
+.flow-help-swatch.gray{background:#94a3b8}
 
 /* RESIZE HANDLE */
 .resize-handle{
@@ -302,20 +314,35 @@ body{
 .node-status.error,.node-status.failed{background:#ef4444}
 .node-status.stopped{background:#f59e0b}
 .node-status.blocked{background:#7f1d1d}
-.t-node.validation-input,.t-node.runtime-failed{
+.node-status.stale{background:#f59e0b}
+.t-node.state-red,.t-node.validation-input,.t-node.runtime-failed{
   background:#dc2626!important;border-color:#991b1b!important;color:#fff!important;
   box-shadow:0 0 0 2px rgba(220,38,38,.18),0 4px 12px rgba(127,29,29,.25)!important;
   opacity:1!important
 }
-.t-node.validation-prompt{
+.t-node.state-blue,.t-node.validation-prompt{
   background:#2563eb!important;border-color:#1d4ed8!important;color:#fff!important;
   box-shadow:0 0 0 2px rgba(37,99,235,.16),0 4px 12px rgba(30,64,175,.22)!important;
   opacity:1!important
 }
-.t-node.validation-input span,.t-node.validation-prompt span,.t-node.runtime-failed span{
-  color:#fff!important
+.t-node.state-red span,.t-node.state-blue span,.t-node.state-green span,
+.t-node.validation-input span,.t-node.validation-prompt span,.t-node.runtime-failed span{color:#fff!important}
+.t-node.state-yellow{
+  background:#f59e0b!important;border-color:#d97706!important;color:#3b2500!important;
+  box-shadow:0 0 0 2px rgba(245,158,11,.16),0 4px 12px rgba(146,64,14,.20)!important;opacity:1!important
 }
-.t-node.validation-input::before,.t-node.validation-prompt::before,.t-node.runtime-failed::before{display:none}
+.t-node.state-yellow span{color:#3b2500!important}
+.t-node.state-green{
+  background:#16a34a!important;border-color:#15803d!important;color:#fff!important;
+  box-shadow:0 0 0 2px rgba(22,163,74,.16),0 4px 12px rgba(20,83,45,.22)!important;opacity:1!important
+}
+.t-node.state-gray{
+  background:#e2e8f0!important;border-color:#94a3b8!important;color:#334155!important;
+  box-shadow:0 2px 7px rgba(51,65,85,.13)!important;opacity:1!important
+}
+[data-theme="dark"] .t-node.state-gray{background:#475569!important;border-color:#64748b!important;color:#f8fafc!important}
+[data-theme="dark"] .t-node.state-gray span{color:#f8fafc!important}
+.t-node.state-red .node-status,.t-node.state-blue .node-status,.t-node.state-green .node-status,
 .t-node.validation-input .node-status,.t-node.validation-prompt .node-status,.t-node.runtime-failed .node-status{
   border-color:rgba(255,255,255,.9)
 }
@@ -436,22 +463,21 @@ body{
     <div class="resize-handle" id="resizeHandle"></div>
     <div class="header">
       <span>🌳 流程控制</span>
-      <span class="flow-help" tabindex="0" aria-label="查看节点颜色说明">?
-        <span class="flow-help-tooltip" role="tooltip">
-          <span class="flow-help-title">节点颜色与状态</span>
-          <span class="flow-help-row"><span class="flow-help-swatch red"></span><span>红色节点：输入缺失、执行错误或依赖阻塞</span></span>
-          <span class="flow-help-row"><span class="flow-help-swatch blue"></span><span>蓝色节点：输入有效，但 Prompt 为空</span></span>
-          <span class="flow-help-row"><span class="flow-help-dot gray"></span><span>灰点：待执行</span></span>
-          <span class="flow-help-row"><span class="flow-help-dot yellow"></span><span>黄点：正在执行</span></span>
-          <span class="flow-help-row"><span class="flow-help-dot green"></span><span>绿点：执行完成</span></span>
-          <span class="flow-help-row"><span class="flow-help-dot orange"></span><span>橙色状态：手动停止</span></span>
-          <span style="display:block;margin-top:6px;color:var(--text2)">顶部自定义颜色标签仅用于分类，不代表运行状态。</span>
+      <span class="flow-header-actions">
+        <button class="version-mini" id="btnUndoVersion" disabled title="撤销上一次流程修改">↶<span class="version-mini-count" id="undoVersionCount">0</span></button>
+        <button class="version-mini" id="btnRedoVersion" disabled title="重做刚才撤销的修改">↷<span class="version-mini-count" id="redoVersionCount">0</span></button>
+        <span class="flow-help" tabindex="0" aria-label="查看五种节点颜色说明">?
+          <span class="flow-help-tooltip" role="tooltip">
+            <span class="flow-help-title">五种节点状态颜色</span>
+            <span class="flow-help-row"><span class="flow-help-swatch gray"></span><span><b>灰色</b>：从未执行或等待执行</span></span>
+            <span class="flow-help-row"><span class="flow-help-swatch yellow"></span><span><b>黄色</b>：正在执行，或内容修改后结果已过期</span></span>
+            <span class="flow-help-row"><span class="flow-help-swatch green"></span><span><b>绿色</b>：执行完成，当前输出有效且可以复用</span></span>
+            <span class="flow-help-row"><span class="flow-help-swatch red"></span><span><b>红色</b>：输入缺失、执行错误或依赖阻塞</span></span>
+            <span class="flow-help-row"><span class="flow-help-swatch blue"></span><span><b>蓝色</b>：输入有效，但 Prompt 为空</span></span>
+            <span style="display:block;margin-top:7px;color:var(--text2)">节点顶部细色条仍是自定义分类标签，不属于运行状态。</span>
+          </span>
         </span>
       </span>
-    </div>
-    <div class="tree-version-bar">
-      <button class="btn btn-sm" id="btnRollbackVersion" disabled>↶ 回退版本 <span id="versionHistoryCount">0/5</span></button>
-      <span class="tree-version-note">结构与内容</span>
     </div>
     <div class="body" id="treeBody"><div id="treeContainer"></div></div>
     <div class="tree-buttons" id="treeButtons">
@@ -489,9 +515,11 @@ let abortController = null;
 let isRunning = false;
 let runQueue = [];
 let runIndex = 0;
-const WORKFLOW_HISTORY_KEY = 'wf_history_v1';
+const WORKFLOW_HISTORY_KEY = 'wf_history_v2';
+const LEGACY_WORKFLOW_HISTORY_KEY = 'wf_history_v1';
 const MAX_WORKFLOW_HISTORY = 5;
 let workflowVersionHistory = {};
+let workflowVersionFuture = {};
 let workflowVersionBaselines = {};
 let versionHistoryInitialized = false;
 let isRestoringWorkflowVersion = false;
@@ -1201,7 +1229,11 @@ function prepareExecution(nodes, mode, force) {
   if (isRunning) { showToast('正在执行中', 'warning'); return; }
   var wf = getActiveWorkflow();
   if (!wf || !nodes || !nodes.length) return;
-  var issues = collectExecutionIssues(wf, nodes, mode);
+  var issueNodes = mode === 'dependencies' ? nodes.filter(function(node, index) {
+    return index === nodes.length - 1 || node.status !== 'done' || !hasNodeText(node.output) ||
+           !!getNodeConfigurationIssue(wf, node);
+  }) : nodes;
+  var issues = collectExecutionIssues(wf, issueNodes, mode);
   if (issues.length && !force) {
     showExecutionChoice(issues, function() {
       prepareExecution(nodes, mode, true);
@@ -1248,10 +1280,17 @@ async function runExecutionQueue(nodes, options) {
   abortController = new AbortController();
   runQueue = nodes.map(function(node) { return node.id; });
   runIndex = 0;
-  nodes.forEach(function(node) {
-    node.status = 'pending';
-    node.output = '';
-    node.error = '';
+  var reusableDependencyIds = {};
+  nodes.forEach(function(node, index) {
+    var reusable = options.mode === 'dependencies' && index < nodes.length - 1 &&
+      node.status === 'done' && hasNodeText(node.output) && !getNodeConfigurationIssue(wf, node);
+    if (reusable) {
+      reusableDependencyIds[node.id] = true;
+    } else {
+      node.status = 'pending';
+      node.output = '';
+      node.error = '';
+    }
   });
   renderAll();
   updateProgress(0, nodes.length, '');
@@ -1268,6 +1307,12 @@ async function runExecutionQueue(nodes, options) {
       runIndex = i;
       var node = nodes[i];
       var nodeId = node.id;
+
+      if (reusableDependencyIds[nodeId]) {
+        updateProgress(i + 1, nodes.length, '复用：' + (node.title || '未命名'));
+        updateBottomBar();
+        continue;
+      }
 
       if (options.mode !== 'single') {
         var unmet = getAncestors(wf.tree, nodeId).filter(function(ancestor) {
@@ -1543,7 +1588,9 @@ function renderSettings() {
   document.getElementById('selModel').addEventListener('change', function() {
     providerState.model = this.value;
     normalizeDeepSeekProviderState();
+    markAllWorkflowOutputsStale();
     saveState();
+    renderAll();
   });
   document.getElementById('inpApiKey').addEventListener('change', function() {
     providerState.apiKey = this.value;
@@ -1741,6 +1788,7 @@ function renderWorkspace() {
   var inputTypeSelect = document.getElementById('selInputType');
   if (inputTypeSelect) inputTypeSelect.addEventListener('change', function() {
     node.inputType = this.value;
+    markNodeExecutionStale(node);
     const manualGroup = document.getElementById('inputSourceGroup');
     const inheritGroup = document.getElementById('inheritGroup');
     if (manualGroup) manualGroup.style.display = this.value === 'manual' ? '' : 'none';
@@ -1752,6 +1800,7 @@ function renderWorkspace() {
   if (manualInput) {
     manualInput.addEventListener('input', function() {
       node.manualInput = this.value;
+      markNodeExecutionStale(node);
       renderTree();
     });
     manualInput.addEventListener('change', function() {
@@ -1762,12 +1811,14 @@ function renderWorkspace() {
   var inheritSelect = document.getElementById('selInheritFrom');
   if (inheritSelect) inheritSelect.addEventListener('change', function() {
     node.inheritFrom = this.value || null;
+    markNodeExecutionStale(node);
     saveState();
     renderTree();
   });
   var promptInput = document.getElementById('inpPrompt');
   promptInput.addEventListener('input', function() {
     node.prompt = this.value;
+    markNodeExecutionStale(node);
     renderTree();
   });
   promptInput.addEventListener('change', function() {
@@ -1776,11 +1827,15 @@ function renderWorkspace() {
   });
   document.getElementById('inpMaxTokens').addEventListener('change', function() {
     node.maxTokens = parseInt(this.value) || 4000;
+    markNodeExecutionStale(node);
     saveState();
+    renderTree();
   });
   document.getElementById('inpTemperature').addEventListener('change', function() {
     node.temperature = parseFloat(this.value) || 0.3;
+    markNodeExecutionStale(node);
     saveState();
+    renderTree();
   });
   document.querySelectorAll('.color-btn').forEach(function(el) {
     el.addEventListener('click', function() {
@@ -1811,7 +1866,7 @@ function renderWorkspace() {
 }
 
 function getStatusText(status) {
-  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', error: '❌ 错误', blocked: '🚫 依赖阻塞', stopped: '⏹ 已停止' };
+  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', stale: '⚠️ 结果已过期', error: '❌ 错误', blocked: '🚫 依赖阻塞', stopped: '⏹ 已停止' };
   return m[status] || '⏳ 待执行';
 }
 
@@ -1860,13 +1915,17 @@ function renderNode(node, depth) {
   let lok = node.locked ? ' locked' : '';
   let stat = node.status || 'pending';
   let validation = wf ? getNodeConfigurationIssue(wf, node) : null;
-  let validationClass = stat === 'error' || stat === 'blocked' ? ' runtime-failed' :
-                        validation && validation.level === 'error' ? ' validation-input' :
-                        validation && validation.level === 'warning' ? ' validation-prompt' : '';
+  let stateClass = stat === 'error' || stat === 'blocked' || (validation && validation.level === 'error') ? ' state-red' :
+                   validation && validation.level === 'warning' ? ' state-blue' :
+                   stat === 'running' || stat === 'stale' || stat === 'stopped' ? ' state-yellow' :
+                   stat === 'done' && hasNodeText(node.output) ? ' state-green' : ' state-gray';
   let validationTitle = stat === 'blocked' || stat === 'error' ? (node.error || getStatusText(stat)) :
-                        validation ? validation.reason : '';
+                        validation ? validation.reason :
+                        stat === 'stale' ? '内容已修改，原执行结果已过期' :
+                        stat === 'done' ? '执行完成，输出有效且可以复用' :
+                        stat === 'running' ? '正在执行' : '等待执行';
   let html = '<li>';
-  html += '<div class="t-node' + sel + col + lok + validationClass + '" data-id="' + node.id + '" title="' + escAttr(validationTitle) + '">';
+  html += '<div class="t-node' + sel + col + lok + stateClass + '" data-id="' + node.id + '" title="' + escAttr(validationTitle) + '">';
   var movable = !isMainNode(wf, node) && !node.locked;
   html += '<span class="node-drag" draggable="' + (movable ? 'true' : 'false') + '" data-id="' + node.id + '" title="' + (movable ? '拖拽移动节点' : '此节点不可移动') + '">⠿</span>';
   html += '<span class="node-num">' + (path ? path + '级' : '') + '</span>';
@@ -2071,32 +2130,94 @@ function createWorkflowVersionEntry(wf) {
 }
 
 function getWorkflowVersionFingerprint(entry) {
-  return JSON.stringify({
-    title: entry ? entry.title : '',
-    tree: entry ? entry.tree : null
+  return JSON.stringify({ title: entry ? entry.title : '', tree: entry ? entry.tree : null });
+}
+
+function collectVersionNodes(node, parentId, map) {
+  if (!node) return;
+  map[node.id] = { node: node, parentId: parentId };
+  (node.children || []).forEach(function(child) {
+    collectVersionNodes(child, node.id, map);
   });
 }
 
+function getExecutionRelevantFingerprint(node) {
+  var data = {};
+  Object.keys(node || {}).forEach(function(key) {
+    if (key === 'children' || key === 'id' || key === 'title' || key === 'color' ||
+        key === 'locked' || key === '_isMainNode') return;
+    data[key] = node[key];
+  });
+  return JSON.stringify(data);
+}
+
+function markNodeExecutionStale(node) {
+  if (!node) return;
+  if (node.status !== 'pending' || hasNodeText(node.output)) node.status = 'stale';
+  node.error = '';
+  (node.children || []).forEach(function(child) {
+    markNodeExecutionStale(child);
+  });
+}
+
+function markChangedExecutionNodesStale(wf, previousEntry, currentEntry) {
+  if (!wf || !previousEntry || !previousEntry.tree || !currentEntry || !currentEntry.tree) return;
+  var previousMap = {};
+  var currentMap = {};
+  collectVersionNodes(previousEntry.tree, null, previousMap);
+  collectVersionNodes(currentEntry.tree, null, currentMap);
+  Object.keys(currentMap).forEach(function(nodeId) {
+    var previous = previousMap[nodeId];
+    var current = currentMap[nodeId];
+    if (!previous) return;
+    if (previous.parentId !== current.parentId ||
+        getExecutionRelevantFingerprint(previous.node) !== getExecutionRelevantFingerprint(current.node)) {
+      markNodeExecutionStale(findNode(wf.tree, nodeId));
+    }
+  });
+}
+
+function markAllWorkflowOutputsStale() {
+  workflows.forEach(function(wf) {
+    var mainNode = ensureMainNode(wf);
+    if (mainNode) markNodeExecutionStale(mainNode);
+  });
+}
+
+function normalizeHistoryMap(rawMap) {
+  var result = {};
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) return result;
+  Object.keys(rawMap).forEach(function(workflowId) {
+    if (!Array.isArray(rawMap[workflowId])) return;
+    result[workflowId] = rawMap[workflowId].filter(function(entry) {
+      return entry && typeof entry === 'object' && entry.tree && typeof entry.tree === 'object';
+    }).slice(-MAX_WORKFLOW_HISTORY);
+  });
+  return result;
+}
+
 function loadWorkflowVersionHistory() {
-  var parsed = parseStoredJson(
-    localStorage.getItem(WORKFLOW_HISTORY_KEY),
-    {},
-    '流程版本历史',
-    'wf_history_corrupt_backup'
-  );
-  workflowVersionHistory = {};
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    Object.keys(parsed).forEach(function(workflowId) {
-      if (!Array.isArray(parsed[workflowId])) return;
-      workflowVersionHistory[workflowId] = parsed[workflowId].filter(function(entry) {
-        return entry && typeof entry === 'object' && entry.tree && typeof entry.tree === 'object';
-      }).slice(-MAX_WORKFLOW_HISTORY);
-    });
+  var raw = localStorage.getItem(WORKFLOW_HISTORY_KEY);
+  var parsed = parseStoredJson(raw, null, '流程版本历史', 'wf_history_corrupt_backup');
+  if (parsed && parsed.past && typeof parsed.past === 'object') {
+    workflowVersionHistory = normalizeHistoryMap(parsed.past);
+    workflowVersionFuture = normalizeHistoryMap(parsed.future);
+    return;
   }
+  var legacy = parseStoredJson(
+    localStorage.getItem(LEGACY_WORKFLOW_HISTORY_KEY),
+    {},
+    '旧版流程历史'
+  );
+  workflowVersionHistory = normalizeHistoryMap(legacy);
+  workflowVersionFuture = {};
 }
 
 function saveWorkflowVersionHistory() {
-  localStorage.setItem(WORKFLOW_HISTORY_KEY, JSON.stringify(workflowVersionHistory));
+  localStorage.setItem(WORKFLOW_HISTORY_KEY, JSON.stringify({
+    past: workflowVersionHistory,
+    future: workflowVersionFuture
+  }));
 }
 
 function initializeWorkflowVersionBaselines() {
@@ -2128,9 +2249,11 @@ function trackWorkflowVersionChanges() {
       return;
     }
     if (baseline.fingerprint !== fingerprint) {
+      markChangedExecutionNodesStale(wf, baseline.entry, entry);
       var history = workflowVersionHistory[wf.id] || [];
       history.push(baseline.entry);
       workflowVersionHistory[wf.id] = history.slice(-MAX_WORKFLOW_HISTORY);
+      workflowVersionFuture[wf.id] = [];
       workflowVersionBaselines[wf.id] = { fingerprint: fingerprint, entry: entry };
       historyChanged = true;
     }
@@ -2138,67 +2261,87 @@ function trackWorkflowVersionChanges() {
   Object.keys(workflowVersionBaselines).forEach(function(workflowId) {
     if (!currentIds[workflowId]) delete workflowVersionBaselines[workflowId];
   });
-  Object.keys(workflowVersionHistory).forEach(function(workflowId) {
-    if (!currentIds[workflowId]) {
-      delete workflowVersionHistory[workflowId];
-      historyChanged = true;
-    }
+  [workflowVersionHistory, workflowVersionFuture].forEach(function(historyMap) {
+    Object.keys(historyMap).forEach(function(workflowId) {
+      if (!currentIds[workflowId]) {
+        delete historyMap[workflowId];
+        historyChanged = true;
+      }
+    });
   });
   if (historyChanged) saveWorkflowVersionHistory();
 }
 
 function updateVersionControls() {
-  var button = document.getElementById('btnRollbackVersion');
-  var countEl = document.getElementById('versionHistoryCount');
-  if (!button || !countEl) return;
-  var history = activeWorkflowId && workflowVersionHistory[activeWorkflowId]
-    ? workflowVersionHistory[activeWorkflowId]
-    : [];
-  var count = Math.min(history.length, MAX_WORKFLOW_HISTORY);
-  countEl.textContent = count + '/' + MAX_WORKFLOW_HISTORY;
-  button.disabled = isRunning || count === 0;
-  if (isRunning) {
-    button.title = '流程执行期间不能回退版本';
-  } else if (count === 0) {
-    button.title = '修改流程后会自动保留最近 5 个版本';
-  } else {
-    var latest = history[history.length - 1];
-    button.title = '回退到 ' + new Date(latest.savedAt).toLocaleString();
-  }
+  var undoButton = document.getElementById('btnUndoVersion');
+  var redoButton = document.getElementById('btnRedoVersion');
+  var undoCount = document.getElementById('undoVersionCount');
+  var redoCount = document.getElementById('redoVersionCount');
+  if (!undoButton || !redoButton || !undoCount || !redoCount) return;
+  var past = activeWorkflowId && workflowVersionHistory[activeWorkflowId]
+    ? workflowVersionHistory[activeWorkflowId] : [];
+  var future = activeWorkflowId && workflowVersionFuture[activeWorkflowId]
+    ? workflowVersionFuture[activeWorkflowId] : [];
+  undoCount.textContent = Math.min(past.length, MAX_WORKFLOW_HISTORY);
+  redoCount.textContent = Math.min(future.length, MAX_WORKFLOW_HISTORY);
+  undoButton.disabled = isRunning || past.length === 0;
+  redoButton.disabled = isRunning || future.length === 0;
+  undoButton.title = isRunning ? '流程执行期间不能撤销' :
+    past.length ? '撤销到上一个流程版本' : '没有可撤销的版本';
+  redoButton.title = isRunning ? '流程执行期间不能重做' :
+    future.length ? '重做刚才撤销的流程版本' : '没有可重做的版本';
 }
 
-function restoreLatestWorkflowVersion() {
+function applyWorkflowVersionEntry(wf, target) {
+  var previousSelectedId = selectedNodeId;
+  wf.title = typeof target.title === 'string' ? target.title : wf.title;
+  wf.tree = normalizeNodeData(
+    JSON.parse(JSON.stringify(target.tree)),
+    null,
+    new Set(),
+    { count: 0 }
+  );
+  ensureMainNode(wf);
+  repairInternalRootReferences(wf);
+  wf.updatedAt = new Date().toISOString();
+  selectedNodeId = previousSelectedId && findNode(wf.tree, previousSelectedId)
+    ? previousSelectedId
+    : ensureMainNode(wf).id;
+}
+
+function moveWorkflowVersion(direction) {
   if (isRunning) {
-    showToast('流程执行期间不能回退版本', 'warning');
+    showToast('流程执行期间不能切换版本', 'warning');
     return;
   }
   var wf = getActiveWorkflow();
-  var history = wf && workflowVersionHistory[wf.id] ? workflowVersionHistory[wf.id] : [];
-  if (!wf || !history.length) {
-    showToast('当前流程没有可回退的版本', 'info');
+  if (!wf) return;
+  var source = direction === 'undo'
+    ? (workflowVersionHistory[wf.id] || [])
+    : (workflowVersionFuture[wf.id] || []);
+  if (!source.length) {
+    showToast(direction === 'undo' ? '没有可撤销的版本' : '没有可重做的版本', 'info');
     return;
   }
-  var target = history[history.length - 1];
-  var targetTime = new Date(target.savedAt).toLocaleString();
-  showConfirm('回退到 ' + targetTime + ' 的版本吗？当前结构和内容会被替换，执行结果将重置。', function() {
-    var previousSelectedId = selectedNodeId;
-    history.pop();
-    workflowVersionHistory[wf.id] = history;
+  var target = source[source.length - 1];
+  var actionText = direction === 'undo' ? '撤销上一次修改' : '重做刚才的修改';
+  showConfirm(actionText + '吗？流程内容会切换，执行结果将重置。', function() {
+    var current = createWorkflowVersionEntry(wf);
+    source.pop();
+    if (direction === 'undo') {
+      var future = workflowVersionFuture[wf.id] || [];
+      future.push(current);
+      workflowVersionFuture[wf.id] = future.slice(-MAX_WORKFLOW_HISTORY);
+      workflowVersionHistory[wf.id] = source;
+    } else {
+      var past = workflowVersionHistory[wf.id] || [];
+      past.push(current);
+      workflowVersionHistory[wf.id] = past.slice(-MAX_WORKFLOW_HISTORY);
+      workflowVersionFuture[wf.id] = source;
+    }
     isRestoringWorkflowVersion = true;
     try {
-      wf.title = typeof target.title === 'string' ? target.title : wf.title;
-      wf.tree = normalizeNodeData(
-        JSON.parse(JSON.stringify(target.tree)),
-        null,
-        new Set(),
-        { count: 0 }
-      );
-      ensureMainNode(wf);
-      repairInternalRootReferences(wf);
-      wf.updatedAt = new Date().toISOString();
-      selectedNodeId = previousSelectedId && findNode(wf.tree, previousSelectedId)
-        ? previousSelectedId
-        : ensureMainNode(wf).id;
+      applyWorkflowVersionEntry(wf, target);
       var restoredEntry = createWorkflowVersionEntry(wf);
       workflowVersionBaselines[wf.id] = {
         fingerprint: getWorkflowVersionFingerprint(restoredEntry),
@@ -2212,9 +2355,12 @@ function restoreLatestWorkflowVersion() {
     renderWorkflowList();
     renderAll();
     updateWfNameInput();
-    showToast('已回退到上一版本', 'success');
+    showToast(direction === 'undo' ? '已撤销上一次修改' : '已重做修改', 'success');
   });
 }
+
+function undoWorkflowVersion() { moveWorkflowVersion('undo'); }
+function redoWorkflowVersion() { moveWorkflowVersion('redo'); }
 
 // ── Persistence ──
 function saveState() {
@@ -2455,8 +2601,10 @@ loadState();
 renderWorkflowList();
 var btnWf=document.getElementById('btnNewWorkflow');
 if(btnWf)btnWf.addEventListener('click',newWorkflow);
-var btnRollbackVersion=document.getElementById('btnRollbackVersion');
-if(btnRollbackVersion)btnRollbackVersion.addEventListener('click',restoreLatestWorkflowVersion);
+var btnUndoVersion=document.getElementById('btnUndoVersion');
+var btnRedoVersion=document.getElementById('btnRedoVersion');
+if(btnUndoVersion)btnUndoVersion.addEventListener('click',undoWorkflowVersion);
+if(btnRedoVersion)btnRedoVersion.addEventListener('click',redoWorkflowVersion);
 updateBtnPos();
 try{renderAll();}catch(e){console.error('renderAll',e);}
 window.addEventListener('resize',updateBtnPos);
