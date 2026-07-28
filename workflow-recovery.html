@@ -376,6 +376,129 @@ function createNode(title, opts) {
   };
 }
 
+const WORKFLOW_EXPORT_SCHEMA = 'linjin.workflow';
+const WORKFLOW_EXPORT_VERSION = 2;
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+const MAX_IMPORT_NODES = 5000;
+
+function parseStoredJson(raw, fallback, label, backupKey) {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn((label || 'JSON') + ' 解析失败:', err);
+    if (backupKey && typeof localStorage !== 'undefined') {
+      try { localStorage.setItem(backupKey, raw); } catch (backupErr) {}
+    }
+    return fallback;
+  }
+}
+
+function normalizeNodeData(node, parentId, seenIds, counter) {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) node = createNode('新节点');
+  seenIds = seenIds || new Set();
+  counter = counter || { count: 0 };
+  counter.count += 1;
+  if (counter.count > MAX_IMPORT_NODES) throw new Error('节点数量超过上限 ' + MAX_IMPORT_NODES);
+
+  if (typeof node.id !== 'string' || !node.id || seenIds.has(node.id)) node.id = createNode('').id;
+  seenIds.add(node.id);
+  node.title = typeof node.title === 'string' ? node.title : '';
+  node.prompt = typeof node.prompt === 'string' ? node.prompt : '';
+  node.inputType = typeof node.inputType === 'string' && node.inputType ? node.inputType : 'manual';
+  node.inheritFrom = typeof node.inheritFrom === 'string' && node.inheritFrom ? node.inheritFrom : null;
+  node.manualInput = typeof node.manualInput === 'string' ? node.manualInput : '';
+  node.output = typeof node.output === 'string' ? node.output : '';
+  node.status = typeof node.status === 'string' && node.status ? node.status : 'pending';
+  if (node.status === 'running') node.status = 'pending';
+  node.error = typeof node.error === 'string' ? node.error : '';
+  node.maxTokens = Number.isFinite(Number(node.maxTokens)) && Number(node.maxTokens) > 0 ? Number(node.maxTokens) : 4000;
+  node.temperature = Number.isFinite(Number(node.temperature)) ? Number(node.temperature) : 0.3;
+  node.color = typeof node.color === 'string' ? node.color : '';
+  node._collapsed = node._collapsed === true;
+  node.locked = node.locked === true;
+  node._parentId = parentId;
+  node.children = Array.isArray(node.children) ? node.children.filter(function(child) {
+    return child && typeof child === 'object' && !Array.isArray(child);
+  }) : [];
+  node.children = node.children.map(function(child) {
+    return normalizeNodeData(child, node.id, seenIds, counter);
+  });
+  return node;
+}
+
+function normalizeWorkflowData(wf, index) {
+  if (!wf || typeof wf !== 'object' || Array.isArray(wf)) return null;
+  if (typeof wf.id !== 'string' || !wf.id) wf.id = 'wf_' + Date.now() + '_' + (index || 0) + '_' + Math.random().toString(36).slice(2,6);
+  wf.title = typeof wf.title === 'string' && wf.title ? wf.title : '未命名流程';
+  wf.createdAt = typeof wf.createdAt === 'string' ? wf.createdAt : new Date().toISOString();
+  wf.updatedAt = typeof wf.updatedAt === 'string' ? wf.updatedAt : wf.createdAt;
+  if (!wf.tree || typeof wf.tree !== 'object' || Array.isArray(wf.tree)) wf.tree = createNode('流程根节点');
+  wf.tree = normalizeNodeData(wf.tree, null, new Set(), { count: 0 });
+  ensureMainNode(wf);
+  return wf;
+}
+
+function normalizeWorkflowList(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(function(wf, index) { return normalizeWorkflowData(wf, index); }).filter(Boolean);
+}
+
+function buildWorkflowExport(wf) {
+  wf = normalizeWorkflowData(wf, 0);
+  if (!wf) throw new Error('当前流程无效');
+  return {
+    schema: WORKFLOW_EXPORT_SCHEMA,
+    version: WORKFLOW_EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    workflow: {
+      title: wf.title,
+      createdAt: wf.createdAt,
+      updatedAt: wf.updatedAt,
+      tree: JSON.parse(JSON.stringify(wf.tree))
+    },
+    provider: {
+      provider: providerState.provider,
+      model: providerState.model
+    }
+  };
+}
+
+function readWorkflowImport(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('导入文件必须是 JSON 对象');
+  if (data.schema && data.schema !== WORKFLOW_EXPORT_SCHEMA) throw new Error('不支持的流程文件类型');
+  if (data.version && Number(data.version) > WORKFLOW_EXPORT_VERSION) throw new Error('流程文件版本过新，请升级页面后再导入');
+
+  var source = data.workflow && typeof data.workflow === 'object' ? data.workflow : data;
+  if (!source.tree || typeof source.tree !== 'object' || Array.isArray(source.tree)) throw new Error('导入文件缺少有效的 tree');
+  return {
+    title: typeof source.title === 'string' ? source.title : null,
+    createdAt: typeof source.createdAt === 'string' ? source.createdAt : null,
+    updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : null,
+    tree: source.tree,
+    provider: data.provider && typeof data.provider === 'object' ? data.provider : null
+  };
+}
+
+function applyWorkflowImport(wf, data) {
+  if (!wf) throw new Error('当前没有可导入的流程');
+  var imported = readWorkflowImport(data);
+  wf.tree = imported.tree;
+  if (imported.title) wf.title = imported.title;
+  if (imported.createdAt) wf.createdAt = imported.createdAt;
+  wf.updatedAt = new Date().toISOString();
+  normalizeWorkflowData(wf, 0);
+
+  if (imported.provider) {
+    if (typeof imported.provider.provider === 'string' && imported.provider.provider &&
+        (typeof PROVIDERS === 'undefined' || Object.prototype.hasOwnProperty.call(PROVIDERS, imported.provider.provider))) {
+      providerState.provider = imported.provider.provider;
+    }
+    if (typeof imported.provider.model === 'string') providerState.model = imported.provider.model;
+  }
+  return ensureMainNode(wf);
+}
+
 function getActiveWorkflow(){return workflows.find(w=>w.id===activeWorkflowId);}
 
 function getMainNode(wf) {
@@ -810,6 +933,7 @@ async function executeNode(nodeId) {
   } finally {
     isRunning = false;
     abortController = null;
+    saveState();
     renderAll();
   }
 }
@@ -917,11 +1041,13 @@ async function executeAll(nodeId) {
         n.error = err.message;
       }
     }
+    saveState();
     renderAll();
     updateBottomBar();
   }
 
   abortController = null;
+  saveState();
   updateBottomBar();
 }
 
@@ -1038,11 +1164,13 @@ async function runCascade(nodeId){
     }catch(err){
       if(err.name==='AbortError'){n.status='done';}else{n.status='error';n.error=err.message;}
     }
+    saveState();
     renderAll();
     updateProgress(i+1,queue.length,'');
   }
   isRunning = false;
   abortController=null;
+  saveState();
   updateProgress(queue.length,queue.length,'');
   setTimeout(function(){var el=document.getElementById('execProgress');if(el)el.style.display='none';},2000);
   updateBottomBar();
@@ -1159,16 +1287,22 @@ function renderSettings() {
     saveState();
   });
   document.getElementById('btnExport').addEventListener('click', function() {
-    var wf = getActiveWorkflow();
-    if (!wf) return;
-    const data = JSON.stringify({ tree: wf.tree, provider: providerState }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'workflow.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    showToast('流程已导出', 'success');
+    try {
+      var wf = getActiveWorkflow();
+      if (!wf) throw new Error('当前没有可导出的流程');
+      var exportData = buildWorkflowExport(wf);
+      const data = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = (wf.title || 'workflow').replace(/[\\/:*?"<>|]+/g, '_') + '.workflow.json';
+      a.click();
+      setTimeout(function() { URL.revokeObjectURL(url); }, 0);
+      showToast('流程已导出（不包含 API Key）', 'success');
+    } catch (err) {
+      showToast('导出失败: ' + err.message, 'error');
+    }
   });
   document.getElementById('btnImport').addEventListener('click', function() {
     document.getElementById('importInput').click();
@@ -1176,23 +1310,28 @@ function renderSettings() {
   document.getElementById('importInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) {
+      showToast('导入失败: 文件不能超过 5MB', 'error');
+      this.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = function(ev) {
       try {
         const data = JSON.parse(ev.target.result);
         var wf = getActiveWorkflow();
-        if (data.tree && wf) {
-          wf.tree = data.tree;
-          var importedMainNode = ensureMainNode(wf);
-          selectedNodeId = importedMainNode ? importedMainNode.id : null;
-        }
-        if (data.provider) Object.assign(providerState, data.provider);
-        saveState();
+        var importedMainNode = applyWorkflowImport(wf, data);
+        selectedNodeId = importedMainNode ? importedMainNode.id : null;
+        if (!saveState()) throw new Error('导入内容无法保存到浏览器');
+        renderWorkflowList();
         renderAll();
-        showToast('流程已导入', 'success');
+        showToast('流程已导入，API Key 保持当前设置', 'success');
       } catch(err) {
         showToast('导入失败: ' + err.message, 'error');
       }
+    };
+    reader.onerror = function() {
+      showToast('导入失败: 无法读取文件', 'error');
     };
     reader.readAsText(file);
     this.value = '';
@@ -1487,6 +1626,7 @@ function switchWorkflow(id){
       selectedNodeId=mainNode?mainNode.id:null;
     }
   }
+  saveState();
   renderWorkflowList();
   renderAll();
   updateWfNameInput();
@@ -1534,23 +1674,32 @@ function updateWfNameInput(){
 // ── Persistence ──
 function saveState() {
   try {
-    workflows.forEach(function(wf) { ensureMainNode(wf); });
+    workflows = normalizeWorkflowList(workflows);
+    if (activeWorkflowId && !workflows.some(function(wf) { return wf.id === activeWorkflowId; })) {
+      activeWorkflowId = workflows.length ? workflows[0].id : null;
+    }
+    var activeWf = getActiveWorkflow();
+    if (activeWf && (!selectedNodeId || !findNode(activeWf.tree, selectedNodeId))) {
+      var fallbackMain = ensureMainNode(activeWf);
+      selectedNodeId = fallbackMain ? fallbackMain.id : null;
+    }
     localStorage.setItem('wf_list', JSON.stringify(workflows));
     localStorage.setItem('wf_active', activeWorkflowId || '');
     localStorage.setItem('wf_provider', JSON.stringify(providerState));
     if (selectedNodeId) localStorage.setItem('wf_selected', selectedNodeId);
     else localStorage.removeItem('wf_selected');
-  } catch(e) {}
+    return true;
+  } catch(e) {
+    console.error('保存流程失败:', e);
+    if (document.getElementById('toastContainer')) showToast('保存失败: ' + e.message, 'error');
+    return false;
+  }
 }
 
 function loadState() {
   try {
     const list = localStorage.getItem('wf_list');
-    if (list) {
-      workflows = JSON.parse(list);
-      if (!Array.isArray(workflows)) workflows = [];
-      workflows.forEach(function(wf) { ensureMainNode(wf); });
-    }
+    workflows = normalizeWorkflowList(parseStoredJson(list, [], '流程数据', 'wf_list_corrupt_backup'));
 
     if (workflows.length === 0) {
       var wf = {
@@ -1561,7 +1710,7 @@ function loadState() {
         updatedAt: new Date().toISOString()
       };
       var mn3=createNode('主任务');mn3.locked=true;mn3._isMainNode=true;mn3._parentId=wf.tree.id;wf.tree.children.push(mn3);
-      workflows.push(wf);
+      workflows.push(normalizeWorkflowData(wf, 0));
     }
 
     activeWorkflowId = localStorage.getItem('wf_active') || workflows[0].id;
@@ -1569,24 +1718,30 @@ function loadState() {
       activeWorkflowId = workflows[0].id;
     }
 
-    const prov = localStorage.getItem('wf_provider');
-    if (prov) Object.assign(providerState, JSON.parse(prov));
+    const prov = parseStoredJson(localStorage.getItem('wf_provider'), null, 'Provider 设置');
+    if (prov && typeof prov === 'object' && !Array.isArray(prov)) {
+      if (typeof prov.provider === 'string' && prov.provider) providerState.provider = prov.provider;
+      if (typeof prov.model === 'string') providerState.model = prov.model;
+      if (typeof prov.apiKey === 'string') providerState.apiKey = prov.apiKey;
+    }
 
     const dp49 = localStorage.getItem('dp49');
     const dk30 = localStorage.getItem('dk30');
     if (dp49) {
-      try { providerState.apiKey = atob(dp49); } catch(e) { providerState.apiKey = dk30 || ''; }
+      try { providerState.apiKey = atob(dp49); } catch(e) { providerState.apiKey = dk30 || providerState.apiKey || ''; }
     } else if (dk30) {
       providerState.apiKey = dk30;
     }
 
     selectedNodeId = localStorage.getItem('wf_selected') || null;
-    var wf = getActiveWorkflow();
-    if (wf && (!selectedNodeId || !findNode(wf.tree, selectedNodeId))) {
-      var loadedMainNode = ensureMainNode(wf);
+    var activeWf = getActiveWorkflow();
+    if (activeWf && (!selectedNodeId || !findNode(activeWf.tree, selectedNodeId))) {
+      var loadedMainNode = ensureMainNode(activeWf);
       selectedNodeId = loadedMainNode ? loadedMainNode.id : null;
     }
+    saveState();
   } catch(e) {
+    console.error('加载流程失败:', e);
     var wf = {
       id: 'wf_' + Date.now(),
       title: '未命名流程',
@@ -1595,9 +1750,10 @@ function loadState() {
       updatedAt: new Date().toISOString()
     };
     var mn4=createNode('主任务');mn4.locked=true;mn4._isMainNode=true;mn4._parentId=wf.tree.id;wf.tree.children.push(mn4);
-    workflows = [wf];
+    workflows = [normalizeWorkflowData(wf, 0)];
     activeWorkflowId = wf.id;
     selectedNodeId = wf.tree.children[0].id;
+    saveState();
   }
 }
 
@@ -1742,6 +1898,10 @@ if(btnWf)btnWf.addEventListener('click',newWorkflow);
 updateBtnPos();
 try{renderAll();}catch(e){console.error('renderAll',e);}
 window.addEventListener('resize',updateBtnPos);
+window.addEventListener('beforeunload', function() {
+  saveCurrentNodeEdit();
+  saveState();
+});
 
 // Handle keyboard copy/paste
 document.addEventListener('keydown', function(e) {
