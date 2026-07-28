@@ -594,3 +594,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .execution-mode-select{width:100%;min-width:0}
   .execution-actions .btn{flex:1 1 130px}
 }
+
+.tree-buttons .btn:last-child{grid-column:1/-1}
