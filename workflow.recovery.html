@@ -185,6 +185,7 @@ body{
 .status-badge.running{color:var(--info);border-color:var(--info)}
 .status-badge.done{color:var(--success);border-color:var(--success)}
 .status-badge.error{color:var(--danger);border-color:var(--danger)}
+.status-badge.stopped{color:var(--warning);border-color:var(--warning)}
 
 /* ERROR MESSAGE */
 .error-msg{
@@ -284,7 +285,8 @@ body{
 .node-status.pending{background:#94a3b8}
 .node-status.running{background:#f59e0b;animation:pulse .8s infinite}
 .node-status.done{background:#10b981}
-.node-status.failed{background:#ef4444}
+.node-status.error,.node-status.failed{background:#ef4444}
+.node-status.stopped{background:#f59e0b}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .t-node.locked .node-drag{opacity:.12;cursor:default}
 
@@ -422,7 +424,18 @@ let abortController = null;
 let isRunning = false;
 let runQueue = [];
 let runIndex = 0;
-let providerState = { provider: 'DeepSeek', model: '', apiKey: '' };
+const DEEPSEEK_MODELS = [
+  { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash（快速测试）' },
+  { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro（高质量）' }
+];
+let providerState = { provider: 'DeepSeek', model: 'deepseek-v4-flash', apiKey: '' };
+
+function normalizeDeepSeekProviderState() {
+  providerState.provider = 'DeepSeek';
+  if (!DEEPSEEK_MODELS.some(function(item) { return item.id === providerState.model; })) {
+    providerState.model = 'deepseek-v4-flash';
+  }
+}
 
 function createNode(title, opts) {
   return {
@@ -579,13 +592,10 @@ function applyWorkflowImport(data, fileName) {
   };
   normalizeWorkflowData(wf, workflows.length);
 
-  if (imported.provider) {
-    if (typeof imported.provider.provider === 'string' && imported.provider.provider &&
-        (typeof PROVIDERS === 'undefined' || Object.prototype.hasOwnProperty.call(PROVIDERS, imported.provider.provider))) {
-      providerState.provider = imported.provider.provider;
-    }
-    if (typeof imported.provider.model === 'string') providerState.model = imported.provider.model;
+  if (imported.provider && typeof imported.provider.model === 'string') {
+    providerState.model = imported.provider.model;
   }
+  normalizeDeepSeekProviderState();
 
   workflows.push(wf);
   activeWorkflowId = wf.id;
@@ -889,9 +899,9 @@ function toggleNodeLock(id) {
 // ── Provider configs ──
 const PROVIDERS = {
   DeepSeek: {
-    endpoint: 'https://api.deepseek.com/v1/chat/completions',
+    endpoint: 'https://api.deepseek.com/chat/completions',
     buildBody: (model, prompt, maxTokens, temperature) => ({
-      model: model || 'deepseek-chat',
+      model: model || 'deepseek-v4-flash',
       messages: [{ role: 'user', content: prompt }],
       stream: true,
       max_tokens: maxTokens,
@@ -1027,7 +1037,7 @@ async function executeNode(nodeId) {
   } catch (err) {
     if (err.name === 'AbortError') {
       const n = findNode(wf.tree, nodeId);
-      if (n) n.status = 'done';
+      if (n) n.status = 'stopped';
     } else {
       const n = findNode(wf.tree, nodeId);
       if (n) { n.status = 'error'; n.error = err.message; }
@@ -1047,6 +1057,9 @@ async function executeAll(nodeId) {
   const node = findNode(wf.tree, nodeId);
   if (!node) return;
   if (!providerState.apiKey) { showToast('请先设置 API Key', 'warning'); return; }
+
+  isRunning = true;
+  abortController = new AbortController();
 
   const allNodes = dfsNodes(node);
   runQueue = allNodes.map(n => n.id);
@@ -1137,7 +1150,7 @@ async function executeAll(nodeId) {
       n.status = 'done';
     } catch (err) {
       if (err.name === 'AbortError') {
-        n.status = 'done';
+        n.status = 'stopped';
       } else {
         n.status = 'error';
         n.error = err.message;
@@ -1148,15 +1161,17 @@ async function executeAll(nodeId) {
     updateBottomBar();
   }
 
+  isRunning = false;
   abortController = null;
+  runIndex = runQueue.length;
   saveState();
   updateBottomBar();
 }
 
 function stopExecution() {
-  if (abortController) {
+  if (abortController && !abortController.signal.aborted) {
     abortController.abort();
-    abortController = null;
+    showToast('正在停止执行', 'info');
   }
 }
 
@@ -1203,10 +1218,10 @@ async function runCascade(nodeId){
   var node=findNode(wf.tree,nodeId);
   if(!node)return;
   if(!providerState.apiKey){showToast('请先设置 API Key','warning');return;}
-  isRunning = true;
-  abortController = new AbortController();
   var queue=buildQueue(node);
   if(queue.length===0){showToast('没有待执行的节点','info');return;}
+  isRunning = true;
+  abortController = new AbortController();
   document.getElementById('execProgress').style.display='block';
   updateProgress(0,queue.length,'');
   runQueue=queue.map(function(n){return n.id});
@@ -1264,7 +1279,7 @@ async function runCascade(nodeId){
       }
       n.status='done';
     }catch(err){
-      if(err.name==='AbortError'){n.status='done';}else{n.status='error';n.error=err.message;}
+      if(err.name==='AbortError'){n.status='stopped';}else{n.status='error';n.error=err.message;}
     }
     saveState();
     renderAll();
@@ -1275,6 +1290,7 @@ async function runCascade(nodeId){
   saveState();
   updateProgress(queue.length,queue.length,'');
   setTimeout(function(){var el=document.getElementById('execProgress');if(el)el.style.display='none';},2000);
+  runIndex=runQueue.length;
   updateBottomBar();
 }
 
@@ -1358,16 +1374,19 @@ function updateTreeActionButtons() {
 function renderSettings() {
   const body = document.getElementById('settingsBody');
   const p = providerState;
+  normalizeDeepSeekProviderState();
   body.innerHTML =
     '<div class="form-group">' +
       '<label class="form-label">Provider</label>' +
-      '<select class="form-select" id="selProvider">' +
-        Object.keys(PROVIDERS).map(k => '<option value="' + k + '"' + (p.provider === k ? ' selected' : '') + '>' + k + '</option>').join('') +
-      '</select>' +
+      '<input class="form-input" value="DeepSeek" disabled title="测试阶段仅启用 DeepSeek">' +
     '</div>' +
     '<div class="form-group">' +
       '<label class="form-label">Model</label>' +
-      '<input class="form-input" id="inpModel" value="' + esc(p.model) + '" placeholder="留空使用默认">' +
+      '<select class="form-select" id="selModel">' +
+        DEEPSEEK_MODELS.map(function(item) {
+          return '<option value="' + item.id + '"' + (p.model === item.id ? ' selected' : '') + '>' + item.label + '</option>';
+        }).join('') +
+      '</select>' +
     '</div>' +
     '<div class="form-group">' +
       '<label class="form-label">API Key</label>' +
@@ -1385,12 +1404,9 @@ function renderSettings() {
     '</div>' +
     '<input type="file" id="importInput" accept=".json" style="display:none">';
 
-  document.getElementById('selProvider').addEventListener('change', function() {
-    providerState.provider = this.value;
-    saveState();
-  });
-  document.getElementById('inpModel').addEventListener('change', function() {
+  document.getElementById('selModel').addEventListener('change', function() {
     providerState.model = this.value;
+    normalizeDeepSeekProviderState();
     saveState();
   });
   document.getElementById('inpApiKey').addEventListener('change', function() {
@@ -1490,8 +1506,7 @@ function renderWorkspace() {
   }
   colorHtml += '</div>';
 
-  const isRunningNode = node.status === 'running';
-  const stopDisabled = !isRunningNode;
+  const stopDisabled = !isRunning;
   const statusClass = node.status || 'pending';
   const execMode = localStorage.getItem('wf_execMode') || 'single';
   const locked = node.locked;
@@ -1646,7 +1661,7 @@ function renderWorkspace() {
 }
 
 function getStatusText(status) {
-  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', error: '❌ 错误' };
+  const m = { pending: '⏳ 待执行', running: '🔄 执行中', done: '✅ 完成', error: '❌ 错误', stopped: '⏹ 已停止' };
   return m[status] || '⏳ 待执行';
 }
 
@@ -1813,7 +1828,11 @@ function saveState() {
     }
     localStorage.setItem('wf_list', JSON.stringify(workflows));
     localStorage.setItem('wf_active', activeWorkflowId || '');
-    localStorage.setItem('wf_provider', JSON.stringify(providerState));
+    normalizeDeepSeekProviderState();
+    localStorage.setItem('wf_provider', JSON.stringify({
+      provider: providerState.provider,
+      model: providerState.model
+    }));
     if (selectedNodeId) localStorage.setItem('wf_selected', selectedNodeId);
     else localStorage.removeItem('wf_selected');
     return true;
@@ -1860,6 +1879,7 @@ function loadState() {
     } else if (dk30) {
       providerState.apiKey = dk30;
     }
+    normalizeDeepSeekProviderState();
 
     selectedNodeId = localStorage.getItem('wf_selected') || null;
     var activeWf = getActiveWorkflow();
