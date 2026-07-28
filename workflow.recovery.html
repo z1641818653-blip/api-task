@@ -522,7 +522,7 @@ function ensureMainNode(wf) {
     }
   }
   mainNode._isMainNode = true;
-  mainNode.locked = true;
+  mainNode.locked = false;
   if (!mainNode.title) mainNode.title = '主任务';
   (function clearDuplicateMainMarkers(node) {
     if (!node || !Array.isArray(node.children)) return;
@@ -774,8 +774,8 @@ function toggleNodeLock(id) {
   var n = findNode(wf.tree, id);
   if (!n) return;
   if (isMainNode(wf, n)) {
-    mainNode.locked = true;
-    showToast('主节点必须保持锁定', 'warning');
+    mainNode.locked = false;
+    showToast('主节点可编辑，删除由结构保护控制', 'info');
     renderAll();
     return;
   }
@@ -1438,7 +1438,7 @@ function renderWorkspace() {
         '<button class="btn btn-sm" id="btnExecuteAll">▶ 全部执行</button>' +
         '<button class="btn btn-sm" id="btnStop" ' + (stopDisabled ? 'disabled style="opacity:.4"' : '') + '>⏹ 停止</button>' +
         '<span class="status-badge ' + statusClass + '" id="statusBadge">' + getStatusText(node.status) + '</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' disabled title="主节点必须保持锁定"' : '') + '>' + (mainProtected ? '🔒 主节点' : (locked ? '🔒 已锁定' : '🔓 锁定')) + '</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="toggleNodeLock(\''+node.id+'\')"' + (mainProtected ? ' disabled title="主节点不可删除，但可以编辑"' : '') + '>' + (mainProtected ? '🛡️ 主节点保护' : (locked ? '🔒 已锁定' : '🔓 锁定')) + '</button>' +
       '</div>' +
     '</div>' +
     '<div id="execProgress" style="display:none;margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)">' +
@@ -1654,7 +1654,7 @@ function newWorkflow(){
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  var mainNode=createNode('主任务');mainNode.locked=true;mainNode._isMainNode=true;mainNode._parentId=wf.tree.id;
+  var mainNode=createNode('主任务');mainNode.locked=false;mainNode._isMainNode=true;mainNode._parentId=wf.tree.id;
   wf.tree.children.push(mainNode);
   workflows.push(wf);
   activeWorkflowId = wf.id;
@@ -1709,7 +1709,7 @@ function loadState() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      var mn3=createNode('主任务');mn3.locked=true;mn3._isMainNode=true;mn3._parentId=wf.tree.id;wf.tree.children.push(mn3);
+      var mn3=createNode('主任务');mn3.locked=false;mn3._isMainNode=true;mn3._parentId=wf.tree.id;wf.tree.children.push(mn3);
       workflows.push(normalizeWorkflowData(wf, 0));
     }
 
@@ -1749,7 +1749,7 @@ function loadState() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    var mn4=createNode('主任务');mn4.locked=true;mn4._isMainNode=true;mn4._parentId=wf.tree.id;wf.tree.children.push(mn4);
+    var mn4=createNode('主任务');mn4.locked=false;mn4._isMainNode=true;mn4._parentId=wf.tree.id;wf.tree.children.push(mn4);
     workflows = [normalizeWorkflowData(wf, 0)];
     activeWorkflowId = wf.id;
     selectedNodeId = wf.tree.children[0].id;
