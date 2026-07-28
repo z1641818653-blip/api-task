@@ -1241,6 +1241,16 @@ function renderAll() {
   renderWorkspace();
   renderTree();
   updateWfNameInput();
+  updateTreeActionButtons();
+}
+
+function updateTreeActionButtons() {
+  var deleteBtn = document.querySelector('#treeButtons .btn[data-action="deleteNode"]');
+  if (!deleteBtn) return;
+  var wf = getActiveWorkflow();
+  var mainProtected = !!(wf && selectedNodeId && isMainNode(wf, selectedNodeId));
+  deleteBtn.disabled = mainProtected;
+  deleteBtn.title = mainProtected ? '主节点不可删除' : '';
 }
 
 function renderSettings() {
